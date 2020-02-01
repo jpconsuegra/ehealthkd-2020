@@ -1,0 +1,3 @@
+[submodule "kdtools"]
+	path = kdtools
+	url = git@github.com:jpconsuegra/kdtools.git
