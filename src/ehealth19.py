@@ -3,7 +3,7 @@ import torch.optim as optim
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 
-from kdtools.datasets import LabeledSentencesDS, to_biluov
+from kdtools.datasets import BILUOVSentencesDS
 from kdtools.models import BasicSequenceTagger
 from scripts.submit import Algorithm
 from scripts.utils import Collection
@@ -26,7 +26,7 @@ class UHMajaModel(Algorithm):
     def train_taskA(self, collection: Collection, n_epochs=100):
         sentences = [s.text for s in collection.sentences]
         entities = [[k.spans for k in s.keyphrases] for s in collection.sentences]
-        dataset = LabeledSentencesDS(sentences, lambda ss: to_biluov(ss, entities))
+        dataset = BILUOVSentencesDS(sentences, entities)
 
         model = BasicSequenceTagger(
             char_vocab_size=len(dataset.char_vocab),
