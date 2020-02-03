@@ -1,10 +1,12 @@
+import torch
+import torch.optim as optim
+from torch.nn import CrossEntropyLoss
+from tqdm import tqdm
+
 from kdtools.datasets import LabeledSentencesDS, to_biluov
 from kdtools.models import BasicSequenceTagger
 from scripts.submit import Algorithm
 from scripts.utils import Collection
-
-from torch.nn import CrossEntropyLoss
-import torch.optim as optim
 
 
 class UHMajaModel(Algorithm):
@@ -41,28 +43,31 @@ class UHMajaModel(Algorithm):
         criterion = CrossEntropyLoss()
         for epoch in range(n_epochs):
 
+            correct = 0
+            total = 0
             running_loss = 0.0
-            for i, data in enumerate(dataset.shallow_dataloader(shuffle=True)):
+
+            for data in tqdm(
+                dataset.shallow_dataloader(shuffle=True), total=len(dataset)
+            ):
                 *sentence, label = data
                 optimizer.zero_grad()
 
                 # forward + backward + optimize
-                output = model(sentence)
-
-                print(output.shape)
-                print(label.shape)
+                output = model(sentence).squeeze(0)
 
                 loss = criterion(output, label)
                 loss.backward()
                 optimizer.step()
 
-                # print statistics
                 running_loss += loss.item()
-                if i % 2000 == 1999:  # print every 2000 mini-batches
-                    print(
-                        "[%d, %5d] loss: %.3f" % (epoch + 1, i + 1, running_loss / 2000)
-                    )
-                    running_loss = 0.0
+
+                predicted = torch.argmax(output, -1)
+                total += label.size(0)
+                correct += (predicted == label).sum().item()
+
+            print(f"[{epoch + 1}] loss: {running_loss / len(dataset) :0.3}")
+            print(f"[{epoch + 1}] accuracy: {correct / total}")
 
         return model
 
