@@ -25,6 +25,7 @@
 		// uses the right one for terminals and tasks. For example, /bin/bash (or /bin/ash for Alpine).
 		"terminal.integrated.shell.linux": null,
 		"python.pythonPath": "/usr/local/bin/python",
+		"python.formatting.provider": "black",
 		"python.linting.pylintEnabled": false,
 		"python.linting.mypyEnabled": true,
 		"python.linting.enabled": true
