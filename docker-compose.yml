@@ -1,0 +1,10 @@
+version: "3"
+
+services:
+  ehealthkd:
+    image: "jpconsuegra/ehealthkd-2020"
+    build: "."
+    volumes:
+      - "./:/workspace"
+      - "./kdtools/kdtools:/usr/local/lib/python3.8/site-packages/kdtools"
+    network_mode: "host"
