@@ -18,6 +18,9 @@ Even though this challenge is oriented to the health domain, the structure of th
 
 This challenge can be of interest for experts in the field of natural language processing, specifically for those working on automatic knowledge extraction and discovery. It is not a requirement to have expertise in health texts processing for dealing with the eHealth-KD task, due to the general purpose of the semantic schema defined. Nevertheless, eHealth researchers could find interesting this challenge to evaluate their technologies that rely on health domain knowledge.
 
+**Novelties**. This edition will involve an additional scenario in which an alternative domain (not health related) will be evaluated, to experience with transfer learning techniques. In addition, [COVID-19](https://en.wikipedia.org/wiki/Coronavirus_disease_2019) related documents, i.e. news and documentation, will be played.
+![](img/COVID-19.png)
+
 ## Description of the Subtasks
 
 To simplify the evaluation process, two subtasks are presented:
@@ -27,11 +30,12 @@ To simplify the evaluation process, two subtasks are presented:
 
 ## Submissions and evaluation
 
-There are three evaluation scenarios:
-1. [A main scenario covering both tasks](evaluation#main-evaluation-scenario-1)
-2. [An optional scenario evaluating subtask A](evaluation#optional-subtask-a-scenario-2)
-3. [An optional scenario evaluating subtask B](evaluation#optional-subtask-b-scenario-3)
-4. [An optional scenario in a completely different domain](evaluation#optional-alternative-domain-evaluation-scenario-4)
+There are four evaluation scenarios:
+
+1. [A main scenario covering both tasks](tasks#main-evaluation-scenario-1)
+2. [An optional scenario evaluating subtask A](tasks#optional-subtask-a-scenario-2)
+3. [An optional scenario evaluating subtask B](tasks#optional-subtask-b-scenario-3)
+4. [An optional scenario in a completely different domain](tasks#optional-alternative-domain-evaluation-scenario-4)
 
 The challenge will be graded in Codalab.
 
@@ -43,10 +47,16 @@ All the data will be made available to participants in due time. This includes t
 
 ## Schedule
 
+### News 
+* COVID19 related documents, i.e. news and documentation, will be played.
+* An additional 100 sentences extracted from the Spanish version of Wikinews are available for cross-validation purposes, to evaluate transfer learning approaches (folder `data/development/transfer`) [(read more)](resources#transfer-learning-corpora).
+* An additional 3000 automatically annotated sentences from Medline are available for further training. Note that these sentences have been manually revised and hence are not considered gold standard [(read more)](resources#automatic-corpora).
+
 |Date|Event|Link|
 |---|---|---|
 | 03&nbsp;Feb&nbsp;2020 | Training and development data ready                                 | [📝 Sign Corpus License](https://forms.gle/pUJutSDq2FYLwNWQA)<br>[🏃‍ Training and dev data](https://github.com/knowledge-learning/ehealthkd-2020/data) |
-| 30&nbsp;Mar&nbsp;2020 | Alternative scenario development data ready                         |  |
+| 30&nbsp;Mar&nbsp;2020 | Alternative scenario development data ready                         | [🏃‍ Alt dev data](https://github.com/knowledge-learning/ehealthkd-2020/tree/master/data/development/transfer)  |
+| 30&nbsp;Mar&nbsp;2020 | Ensemble dataset for augmenting training stage, ready                         | [🏃‍ Ensemble](https://github.com/knowledge-learning/ehealthkd-2020/tree/master/data/ensemble)  |
 | 06&nbsp;Apr&nbsp;2020 | **Evaluation start** <br> Test data released                        |  |
 | 19&nbsp;Apr&nbsp;2020 | **Evaluation end** <br> (due by 23:59 UTC)                          |  |
 | 19&nbsp;Apr&nbsp;2020 | **Registration deadline** <br> (due by 23:59 UTC)                   |  |
@@ -60,7 +70,7 @@ All the data will be made available to participants in due time. This includes t
 
 ## Instructions for participation
 
-The competition is managed and run in the [Codalab Competitions platform](). For participation, please register on the platform and follow the instructions detailed there. The following pages provide a detailed description of the problem to be solved and the evaluation. In Codalab you will find details about how to submit a solution, as well as all relevant links.
+The competition is managed and run in the [Codalab Competitions platform](https://competitions.codalab.org/competitions/23454). For participation, please register on the platform and follow the instructions detailed there. The following pages provide a detailed description of the problem to be solved and the evaluation. In Codalab you will find details about how to submit a solution, as well as all relevant links.
 
 <!-- [Click here to enter the competition](https://competitions.codalab.org/competitions/21781). -->
 
@@ -70,14 +80,15 @@ To download the relevant data, [please visit here](https://forms.gle/3KHAvo7e5Mf
 
 The following instructions are subject to change to adapt to the official IberLEF 2020 requirements.
 
-Send your paper to our Program Comitee at [chairs_eHealth-KD@googlegroups.com](mailto:chairs_eHealth-KD@googlegroups.com) before **(Date to be announced)**.
+Send your paper to our Program Comitee at [chairs_eHealth-KD@googlegroups.com](mailto:chairs_eHealth-KD@googlegroups.com) before **(May 8th, 2020)**.
 
 The Organization Committee of eHealth-KD encourages participants to submit a description paper of their systems. Submitted papers will be reviewed by a scientific committee, and only accepted papers will be published at CEUR. The proceedings of eHealth-KD will be jointly published with the proceedings of all tasks of IberLEF 2020. The submitted papers will be peer-reviewed by a Program Commitee which is composed by all the participants and the Organization Commitee.
 
 The manuscripts must satisfy the following rules:
 
-Up to 6 pages plus references formatted according to the [SEPLN template](http://www.sepln.org/home-2/revista/instrucciones-autor/).
-* Articles can be written in English or Spanish. The title, abstract and keywords must be written in both languages.
+The minimum length of the regular paper should be 5 (mandatory minimum) and up to 10 pages plus references formatted according to the [Conference Proceedings Springer template](https://www.springer.com/gp/computer-science/lncs/conference-proceedings-guidelines). The style that appears in the template by default must be used.
+
+* Articles can be written in English. The title, abstract and keywords must be written in English.
 * The document format must be Word or Latex, but the submission must be in PDF format.
 * Instead of describing the task and/or the corpus, you should focus on the description of your experiments and the analysis of your results, and include a citation to the Overview paper. Indications for this citation will be provided in due time.
 * Depending on the final number of participants and the time allocated for the workshop, all or a selected group of papers will be presented and discussed in the Workshop session.
