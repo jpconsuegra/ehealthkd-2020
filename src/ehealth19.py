@@ -1,12 +1,12 @@
 import torch
 import torch.optim as optim
-from kdtools.datasets import BILUOVSentencesDS
+from kdtools.datasets import BILUOVSentencesDS, from_biluov
 from kdtools.models import BasicSequenceTagger
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 
 from scripts.submit import Algorithm, Run, handle_args
-from scripts.utils import Collection
+from scripts.utils import Collection, Keyphrase, Relation
 
 
 class UHMajaModel(Algorithm):
@@ -25,7 +25,24 @@ class UHMajaModel(Algorithm):
         return collection
 
     def run_taskA(self, collection: Collection, **kargs):
-        pass
+        idx = 0
+        model = self.model_taskA
+        dataset = BILUOVSentencesDS([s.text for s in collection.sentences])
+
+        for sid, (*s_features, label) in tqdm(
+            enumerate(dataset.shallow_dataloader()), total=len(dataset)
+        ):
+            sentence = collection.sentences[sid]
+            tokensxsentence = dataset.tokensxsentence[sid]
+            output = model(s_features).squeeze(0)
+            output = output.argmax(dim=-1)
+            labels = [dataset.labels[x] for x in output]
+            decoded = from_biluov(labels, tokensxsentence, spans=True)
+            for spans in decoded:
+                # TODO: set Keyphrase label
+                keyphrase = Keyphrase(sentence, None, idx, spans)
+                idx += 1
+                sentence.keyphrases.append(keyphrase)
 
     def run_taskB(self, collection: Collection, **kargs):
         pass
@@ -89,3 +106,6 @@ if __name__ == "__main__":
 
     training = Collection().load(Path("data/training/scenario.txt"))
     algorithm.train(training)
+
+    tasks = handle_args()
+    Run.submit("ehealth19-maja", tasks, algorithm)
