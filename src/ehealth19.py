@@ -55,7 +55,7 @@ class UHMajaModel(Algorithm):
         pass
 
     def train(self, collection: Collection, n_epochs=100):
-        self.model = self.train_taskA(collection, n_epochs)
+        self.train_taskA(collection, n_epochs)
 
     def train_taskA(self, collection: Collection, n_epochs=100):
         for label in ENTITIES:
@@ -74,14 +74,14 @@ class UHMajaModel(Algorithm):
         dataset = BILUOVSentencesDS(sentences, entities)
 
         model = BasicSequenceTagger(
-            char_vocab_size=len(dataset.char_vocab),
+            char_vocab_size=dataset.char_size,
             char_embedding_dim=self.CHAR_EMBEDDING_DIM,
-            padding_idx=dataset.PADDING,
+            padding_idx=dataset.padding,
             char_repr_dim=self.CHAR_REPR_DIM,
             word_repr_dim=dataset.vectors_len,
-            postag_repr_dim=len(dataset.pos2index),
+            postag_repr_dim=dataset.pos_size,
             token_repr_dim=self.TOKEN_REPR_DIM,
-            num_labels=len(dataset.label2index),
+            num_labels=dataset.label_size,
         )
 
         optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
