@@ -2,6 +2,7 @@ import torch
 import torch.optim as optim
 from kdtools.datasets import BILUOVSentencesDS, from_biluov
 from kdtools.models import BasicSequenceTagger
+from kdtools.utils import train_on_shallow_dataloader
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 
@@ -84,37 +85,14 @@ class UHMajaModel(Algorithm):
             num_labels=dataset.label_size,
         )
 
-        optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-        criterion = CrossEntropyLoss()
-        for epoch in range(n_epochs):
-
-            correct = 0
-            total = 0
-            running_loss = 0.0
-
-            for data in tqdm(
-                dataset.shallow_dataloader(shuffle=True),
-                total=len(dataset),
-                desc=entity_label,
-            ):
-                *sentence, label = data
-                optimizer.zero_grad()
-
-                # forward + backward + optimize
-                output = model(sentence).squeeze(0)
-
-                loss = criterion(output, label)
-                loss.backward()
-                optimizer.step()
-
-                running_loss += loss.item()
-
-                predicted = torch.argmax(output, -1)
-                total += label.size(0)
-                correct += (predicted == label).sum().item()
-
-            print(f"[{epoch + 1}] loss: {running_loss / len(dataset) :0.3}")
-            print(f"[{epoch + 1}] accuracy: {correct / total}")
+        train_on_shallow_dataloader(
+            model,
+            dataset,
+            optim=optim.SGD,
+            criterion=CrossEntropyLoss,
+            n_epochs=n_epochs,
+            desc=entity_label,
+        )
 
         return model
 
