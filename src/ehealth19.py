@@ -2,7 +2,10 @@ import torch
 import torch.optim as optim
 from kdtools.datasets import BILUOVSentencesDS, from_biluov
 from kdtools.models import BasicSequenceTagger
-from kdtools.utils import train_on_shallow_dataloader
+from kdtools.utils import (
+    jointly_train_on_shallow_dataloader,
+    train_on_shallow_dataloader,
+)
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 
@@ -55,17 +58,37 @@ class UHMajaModel(Algorithm):
     def run_taskB(self, collection: Collection, *args, **kargs):
         pass
 
-    def train(self, collection: Collection, n_epochs=100):
-        self.train_taskA(collection, n_epochs)
+    def train(self, collection: Collection, *, jointly, n_epochs=100):
+        self.train_taskA(collection, jointly, n_epochs)
 
-    def train_taskA(self, collection: Collection, n_epochs=100):
+    def train_taskA(self, collection: Collection, jointly, n_epochs=100):
+        char_encoder = None
+
+        models = {}
+        datasets = {}
         for label in ENTITIES:
-            self.taskA_models[label] = self.build_taskA_model(
-                collection, label, n_epochs
+            model, dataset = self.build_taskA_model(
+                collection, label, n_epochs, shared=char_encoder
             )
 
+            models[label] = model
+            datasets[label] = dataset
+
+            char_encoder = model.char_encoder if jointly else None
+
+        if jointly:
+            # dicts are stable
+            self.train_all_taskA_models(
+                models.values(), datasets.values(), "all", n_epochs
+            )
+        else:
+            for label in ENTITIES:
+                self.train_taskA_model(models[label], datasets[label], label, n_epochs)
+
+        self.taskA_models = models
+
     def build_taskA_model(
-        self, collection: Collection, entity_label: str, n_epochs=100
+        self, collection: Collection, entity_label: str, n_epochs=100, shared=None
     ):
         sentences = [s.text for s in collection.sentences]
         entities = [
@@ -83,18 +106,30 @@ class UHMajaModel(Algorithm):
             postag_repr_dim=dataset.pos_size,
             token_repr_dim=self.TOKEN_REPR_DIM,
             num_labels=dataset.label_size,
+            char_encoder=shared,
         )
 
+        return model, dataset
+
+    def train_taskA_model(self, model, dataset, desc, n_epochs=100):
         train_on_shallow_dataloader(
             model,
             dataset,
             optim=optim.SGD,
             criterion=CrossEntropyLoss,
             n_epochs=n_epochs,
-            desc=entity_label,
+            desc=desc,
         )
 
-        return model
+    def train_all_taskA_models(self, models, datasets, desc, n_epochs=100):
+        jointly_train_on_shallow_dataloader(
+            models,
+            datasets,
+            optim=optim.SGD,
+            criterion=CrossEntropyLoss,
+            n_epochs=n_epochs,
+            desc=desc,
+        )
 
 
 if __name__ == "__main__":
@@ -103,7 +138,7 @@ if __name__ == "__main__":
     algorithm = UHMajaModel()
 
     training = Collection().load(Path("data/training/scenario.txt"))
-    algorithm.train(training)
+    algorithm.train(training, jointly=True)
 
     tasks = handle_args()
     Run.submit("ehealth19-maja", tasks, algorithm)
