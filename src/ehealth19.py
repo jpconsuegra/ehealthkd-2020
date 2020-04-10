@@ -1,4 +1,7 @@
+from typing import Dict
+
 import torch
+import torch.nn as nn
 import torch.optim as optim
 from kdtools.datasets import (
     BILUOVSentencesDS,
@@ -9,12 +12,11 @@ from kdtools.datasets import (
 )
 from kdtools.encoders import SequenceCharEncoder
 from kdtools.layers import CharEmbeddingEncoder
-from kdtools.models import BasicSequenceTagger, BasicSequenceClassifier
+from kdtools.models import BasicSequenceClassifier, BasicSequenceTagger
 from kdtools.utils import (
     jointly_train_on_shallow_dataloader,
     train_on_shallow_dataloader,
 )
-from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 
 from scripts.submit import Algorithm, Run, handle_args
@@ -26,10 +28,10 @@ class UHMajaModel(Algorithm):
     CHAR_REPR_DIM = 200
     TOKEN_REPR_DIM = 300
 
-    def __init__(self):
+    def __init__(self, taskA_models=None, taskB_model=None):
         self.nlp = get_nlp()
-        self.taskA_models: dict = None
-        self.taskB_model = None
+        self.taskA_models: Dict[nn.Module] = taskA_models
+        self.taskB_model: nn.Module = taskB_model
 
     def run(self, collection: Collection, *args, taskA: bool, taskB: bool, **kargs):
         if taskA:
@@ -129,7 +131,7 @@ class UHMajaModel(Algorithm):
             model,
             dataset,
             optim=optim.SGD,
-            criterion=CrossEntropyLoss,
+            criterion=nn.CrossEntropyLoss,
             n_epochs=n_epochs,
             desc=desc,
         )
@@ -139,7 +141,7 @@ class UHMajaModel(Algorithm):
             models,
             datasets,
             optim=optim.SGD,
-            criterion=CrossEntropyLoss,
+            criterion=nn.CrossEntropyLoss,
             n_epochs=n_epochs,
             desc=desc,
         )
@@ -210,10 +212,24 @@ class UHMajaModel(Algorithm):
 if __name__ == "__main__":
     from pathlib import Path
 
-    algorithm = UHMajaModel()
+    def _training_task():
+        training = Collection().load(Path("data/training/scenario.txt"))
 
-    training = Collection().load(Path("data/training/scenario.txt"))
-    algorithm.train(training, jointly=True, inclusion=0.1)
+        algorithm = UHMajaModel()
+        algorithm.train(training, jointly=True, inclusion=0.1, n_epochs=1)
+        for label, model in algorithm.taskA_models.items():
+            torch.save(model, f"trained/taskA-{label}.pt")
+        torch.save(algorithm.taskB_model, "./trained/taskB.pt")
 
-    tasks = handle_args()
-    Run.submit("ehealth19-maja", tasks, algorithm)
+    def _run_task():
+        taskA_models = {}
+        for label in ENTITIES:
+            model = torch.load(f"trained/taskA-{label}.pt")
+            taskA_models[label] = model
+            model.eval()
+        taskB_model = torch.load("./trained/taskB.pt")
+        taskB_model.eval()
+        algorithm = UHMajaModel(taskA_models, taskB_model)
+
+        tasks = handle_args()
+        Run.submit("ehealth19-maja", tasks, algorithm)
