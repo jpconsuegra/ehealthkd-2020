@@ -1,3 +1,4 @@
+import os
 from typing import Dict
 
 import torch
@@ -80,12 +81,18 @@ class UHMajaModel(Algorithm):
         jointly,
         inclusion,
         n_epochs=100,
+        save_to=None,
     ):
-        self.train_taskA(collection, validation, jointly, n_epochs)
-        self.train_taskB(collection, validation, jointly, inclusion, n_epochs)
+        self.train_taskA(collection, validation, jointly, n_epochs, save_to)
+        self.train_taskB(collection, validation, jointly, inclusion, n_epochs, save_to)
 
     def train_taskA(
-        self, collection: Collection, validation: Collection, jointly, n_epochs=100
+        self,
+        collection: Collection,
+        validation: Collection,
+        jointly,
+        n_epochs=100,
+        save_to=None,
     ):
         char_encoder = None
 
@@ -111,11 +118,21 @@ class UHMajaModel(Algorithm):
                 validations.values(),
                 "all",
                 n_epochs,
+                save_to=(
+                    [save_to(label) for label in ENTITIES]
+                    if save_to is not None
+                    else None
+                ),
             )
         else:
             for label in ENTITIES:
                 self.train_taskA_model(
-                    models[label], datasets[label], validations[label], label, n_epochs
+                    models[label],
+                    datasets[label],
+                    validations[label],
+                    label,
+                    n_epochs,
+                    save_to=save_to(label) if save_to is not None else None,
                 )
 
         self.taskA_models = models
@@ -144,7 +161,9 @@ class UHMajaModel(Algorithm):
         dataset = BILUOVSentencesDS(sentences, entities, language=self.nlp)
         return dataset
 
-    def train_taskA_model(self, model, dataset, validation, desc, n_epochs=100):
+    def train_taskA_model(
+        self, model, dataset, validation, desc, n_epochs=100, save_to: str = None
+    ):
         train_on_shallow_dataloader(
             model,
             dataset,
@@ -153,9 +172,12 @@ class UHMajaModel(Algorithm):
             criterion=nn.CrossEntropyLoss,
             n_epochs=n_epochs,
             desc=desc,
+            save_to=save_to,
         )
 
-    def train_all_taskA_models(self, models, datasets, validations, desc, n_epochs=100):
+    def train_all_taskA_models(
+        self, models, datasets, validations, desc, n_epochs=100, save_to: str = None
+    ):
         jointly_train_on_shallow_dataloader(
             models,
             datasets,
@@ -164,6 +186,7 @@ class UHMajaModel(Algorithm):
             criterion=nn.CrossEntropyLoss,
             n_epochs=n_epochs,
             desc=desc,
+            save_to=save_to,
         )
 
     def train_taskB(
@@ -173,6 +196,7 @@ class UHMajaModel(Algorithm):
         jointly,
         inclusion,
         n_epochs=100,
+        save_to=None,
     ):
 
         dataset = self.build_taskB_dataset(collection, inclusion)
@@ -200,7 +224,12 @@ class UHMajaModel(Algorithm):
         validation_ds = self.build_taskB_dataset(validation, inclusion=1.1)
 
         train_on_shallow_dataloader(
-            model, dataset, validation_ds, n_epochs=n_epochs, desc="relations"
+            model,
+            dataset,
+            validation_ds,
+            n_epochs=n_epochs,
+            desc="relations",
+            save_to=save_to("taskB"),
         )
 
         self.taskB_model = model
@@ -242,19 +271,35 @@ class UHMajaModel(Algorithm):
 
         return dataset
 
+    def save_models(self, path="./trained/"):
+        for label, model in self.taskA_models.items():
+            torch.save(model, os.path.join(path, f"taskA-{label}.pt"))
+        torch.save(self.taskB_model, os.path.join(path, "taskB.pt"))
+
 
 if __name__ == "__main__":
     from pathlib import Path
+
+    def name_to_path(name):
+        if name in ENTITIES:
+            return f"trained/taskA-{name}.pt"
+        if name == "taskB":
+            return "trained/taskB.pt"
+        raise ValueError("Cannot handle `name`")
 
     def _training_task():
         training = Collection().load(Path("data/training/scenario.txt"))
         validation = Collection().load(Path("data/development/main/scenario.txt"))
 
         algorithm = UHMajaModel()
-        algorithm.train(training, validation, jointly=True, inclusion=0.1, n_epochs=1)
-        for label, model in algorithm.taskA_models.items():
-            torch.save(model, f"trained/taskA-{label}.pt")
-        torch.save(algorithm.taskB_model, "./trained/taskB.pt")
+        algorithm.train(
+            training,
+            validation,
+            jointly=True,
+            inclusion=0.1,
+            n_epochs=1,
+            save_to=name_to_path,
+        )
 
     def _run_task():
         taskA_models = {}
