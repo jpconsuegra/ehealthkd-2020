@@ -72,46 +72,55 @@ class UHMajaModel(Algorithm):
     def run_taskB(self, collection: Collection, *args, **kargs):
         pass
 
-    def train(self, collection: Collection, *, jointly, inclusion, n_epochs=100):
-        self.train_taskA(collection, jointly, n_epochs)
-        self.train_taskB(collection, jointly, inclusion, n_epochs)
+    def train(
+        self,
+        collection: Collection,
+        validation: Collection,
+        *,
+        jointly,
+        inclusion,
+        n_epochs=100,
+    ):
+        self.train_taskA(collection, validation, jointly, n_epochs)
+        self.train_taskB(collection, validation, jointly, inclusion, n_epochs)
 
-    def train_taskA(self, collection: Collection, jointly, n_epochs=100):
+    def train_taskA(
+        self, collection: Collection, validation: Collection, jointly, n_epochs=100
+    ):
         char_encoder = None
 
         models = {}
         datasets = {}
+        validations = {}
         for label in ENTITIES:
-            model, dataset = self.build_taskA_model(
-                collection, label, n_epochs, shared=char_encoder
-            )
+            dataset = self.build_taskA_dataset(collection, label)
+            model = self.build_taskA_model(dataset, n_epochs, shared=char_encoder)
+            validation_ds = self.build_taskA_dataset(validation, label)
 
             models[label] = model
             datasets[label] = dataset
+            validations[label] = validation_ds
 
             char_encoder = model.char_encoder if jointly else None
 
         if jointly:
             # dicts are stable
             self.train_all_taskA_models(
-                models.values(), datasets.values(), "all", n_epochs
+                models.values(),
+                datasets.values(),
+                validations.values(),
+                "all",
+                n_epochs,
             )
         else:
             for label in ENTITIES:
-                self.train_taskA_model(models[label], datasets[label], label, n_epochs)
+                self.train_taskA_model(
+                    models[label], datasets[label], validations[label], label, n_epochs
+                )
 
         self.taskA_models = models
 
-    def build_taskA_model(
-        self, collection: Collection, entity_label: str, n_epochs=100, shared=None
-    ):
-        sentences = [s.text for s in collection.sentences]
-        entities = [
-            [k.spans for k in s.keyphrases if k.label == entity_label]
-            for s in collection.sentences
-        ]
-        dataset = BILUOVSentencesDS(sentences, entities, language=self.nlp)
-
+    def build_taskA_model(self, dataset: BILUOVSentencesDS, n_epochs=100, shared=None):
         model = BasicSequenceTagger(
             char_vocab_size=dataset.char_size,
             char_embedding_dim=self.CHAR_EMBEDDING_DIM,
@@ -124,32 +133,80 @@ class UHMajaModel(Algorithm):
             char_encoder=shared,
         )
 
-        return model, dataset
+        return model
 
-    def train_taskA_model(self, model, dataset, desc, n_epochs=100):
+    def build_taskA_dataset(self, collection: Collection, entity_label: str):
+        sentences = [s.text for s in collection.sentences]
+        entities = [
+            [k.spans for k in s.keyphrases if k.label == entity_label]
+            for s in collection.sentences
+        ]
+        dataset = BILUOVSentencesDS(sentences, entities, language=self.nlp)
+        return dataset
+
+    def train_taskA_model(self, model, dataset, validation, desc, n_epochs=100):
         train_on_shallow_dataloader(
             model,
             dataset,
+            validation,
             optim=optim.SGD,
             criterion=nn.CrossEntropyLoss,
             n_epochs=n_epochs,
             desc=desc,
         )
 
-    def train_all_taskA_models(self, models, datasets, desc, n_epochs=100):
+    def train_all_taskA_models(self, models, datasets, validations, desc, n_epochs=100):
         jointly_train_on_shallow_dataloader(
             models,
             datasets,
+            validations,
             optim=optim.SGD,
             criterion=nn.CrossEntropyLoss,
             n_epochs=n_epochs,
             desc=desc,
         )
 
-    def train_taskB(self, collection: Collection, jointly, inclusion, n_epochs=100):
-        nlp = self.nlp
+    def train_taskB(
+        self,
+        collection: Collection,
+        validation: Collection,
+        jointly,
+        inclusion,
+        n_epochs=100,
+    ):
 
-        tokensxsentence = [nlp(s.text) for s in collection.sentences]
+        dataset = self.build_taskB_dataset(collection, inclusion)
+        char2repr = (
+            next(iter(self.taskA_models.values())).char_encoder if jointly else None
+        )
+
+        model = BasicSequenceClassifier(
+            char_vocab_size=dataset.char_size,
+            char_embedding_dim=self.CHAR_EMBEDDING_DIM,
+            padding_idx=dataset.padding,
+            char_repr_dim=self.CHAR_REPR_DIM,
+            word_repr_dim=dataset.vectors_len,
+            postag_repr_dim=dataset.pos_size,
+            dep_repr_dim=dataset.dep_size,
+            entity_repr_dim=dataset.ent_size,
+            subtree_repr_dim=self.TOKEN_REPR_DIM,
+            token_repr_dim=self.TOKEN_REPR_DIM,
+            num_labels=dataset.label_size,
+            char_encoder=char2repr,
+            already_encoded=False,
+            freeze=True,
+        )
+
+        validation_ds = self.build_taskB_dataset(validation, inclusion=1.1)
+
+        train_on_shallow_dataloader(
+            model, dataset, validation_ds, n_epochs=n_epochs, desc="relations"
+        )
+
+        self.taskB_model = model
+
+    def build_taskB_dataset(self, collection: Collection, inclusion):
+        tokensxsentence = [self.nlp(s.text) for s in collection.sentences]
         entities = [
             [(k.spans, k.label) for k in s.keyphrases] for s in collection.sentences
         ]
@@ -178,35 +235,12 @@ class UHMajaModel(Algorithm):
             token2label,
             ENTITIES,
             RELATIONS,
-            nlp,
+            self.nlp,
             inclusion=inclusion,
             char2repr=None,
         )
 
-        char2repr = (
-            next(iter(self.taskA_models.values())).char_encoder if jointly else None
-        )
-
-        model = BasicSequenceClassifier(
-            char_vocab_size=dataset.char_size,
-            char_embedding_dim=self.CHAR_EMBEDDING_DIM,
-            padding_idx=dataset.padding,
-            char_repr_dim=self.CHAR_REPR_DIM,
-            word_repr_dim=dataset.vectors_len,
-            postag_repr_dim=dataset.pos_size,
-            dep_repr_dim=dataset.dep_size,
-            entity_repr_dim=dataset.ent_size,
-            subtree_repr_dim=self.TOKEN_REPR_DIM,
-            token_repr_dim=self.TOKEN_REPR_DIM,
-            num_labels=dataset.label_size,
-            char_encoder=char2repr,
-            already_encoded=False,
-            freeze=True,
-        )
-
-        train_on_shallow_dataloader(model, dataset, n_epochs=n_epochs, desc="relations")
-
-        self.taskB_model = model
+        return dataset
 
 
 if __name__ == "__main__":
@@ -214,9 +248,10 @@ if __name__ == "__main__":
 
     def _training_task():
         training = Collection().load(Path("data/training/scenario.txt"))
+        validation = Collection().load(Path("data/development/main/scenario.txt"))
 
         algorithm = UHMajaModel()
-        algorithm.train(training, jointly=True, inclusion=0.1, n_epochs=1)
+        algorithm.train(training, validation, jointly=True, inclusion=0.1, n_epochs=1)
         for label, model in algorithm.taskA_models.items():
             torch.save(model, f"trained/taskA-{label}.pt")
         torch.save(algorithm.taskB_model, "./trained/taskB.pt")
