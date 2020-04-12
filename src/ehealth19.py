@@ -29,10 +29,13 @@ class UHMajaModel(Algorithm):
     CHAR_REPR_DIM = 200
     TOKEN_REPR_DIM = 300
 
-    def __init__(self, taskA_models=None, taskB_model=None):
+    def __init__(
+        self, taskA_models=None, taskB_model=None, *, only_representative=False
+    ):
         self.nlp = get_nlp()
         self.taskA_models: Dict[nn.Module] = taskA_models
         self.taskB_model: nn.Module = taskB_model
+        self.only_representative = only_representative
 
     def run(self, collection: Collection, *args, taskA: bool, taskB: bool, **kargs):
         if taskA:
@@ -71,7 +74,29 @@ class UHMajaModel(Algorithm):
                 sentence.keyphrases.append(keyphrase)
 
     def run_taskB(self, collection: Collection, *args, **kargs):
-        pass
+        model = self.taskB_model
+
+        dataset = self.build_taskB_dataset(collection, inclusion=1.1, predict=True)
+
+        for *features, (sid, s_id, d_id) in tqdm(
+            dataset.shallow_dataloader(), total=len(dataset), desc="Relations",
+        ):
+            s_id = s_id.item()
+            d_id = d_id.item()
+
+            output = model(features).squeeze(0)
+            output = output.argmax(dim=-1)
+            label = dataset.labels[output.item()]
+
+            if label is None:
+                continue
+
+            sentence = collection.sentences[sid]
+            rel_origin = sentence.keyphrases[s_id].id
+            rel_destination = sentence.keyphrases[d_id].id
+
+            relation = Relation(sentence, rel_origin, rel_destination, label)
+            sentence.relations.append(relation)
 
     def train(
         self,
@@ -234,14 +259,14 @@ class UHMajaModel(Algorithm):
 
         self.taskB_model = model
 
-    def build_taskB_dataset(self, collection: Collection, inclusion):
+    def build_taskB_dataset(self, collection: Collection, inclusion, predict=False):
         tokensxsentence = [self.nlp(s.text) for s in collection.sentences]
         entities = [
             [(k.spans, k.label) for k in s.keyphrases] for s in collection.sentences
         ]
 
         entitiesxsentence, token2label = match_tokens_to_entities(
-            tokensxsentence, entities, only_representative=False
+            tokensxsentence, entities, only_representative=self.only_representative
         )
 
         keyphrase2tokens = {
@@ -249,14 +274,18 @@ class UHMajaModel(Algorithm):
             for sentence, tokens in zip(collection.sentences, entitiesxsentence)
             for keyphrase, token in zip(sentence.keyphrases, tokens)
         }
-        relations = {
-            (
-                keyphrase2tokens[rel.from_phrase],
-                keyphrase2tokens[rel.to_phrase],
-            ): rel.label
-            for sentence in collection.sentences
-            for rel in sentence.relations
-        }
+        relations = (
+            {
+                (
+                    keyphrase2tokens[rel.from_phrase],
+                    keyphrase2tokens[rel.to_phrase],
+                ): rel.label
+                for sentence in collection.sentences
+                for rel in sentence.relations
+            }
+            if not predict
+            else None
+        )
 
         dataset = DependencyTreeDS(
             entitiesxsentence,
@@ -304,10 +333,10 @@ if __name__ == "__main__":
     def _run_task():
         taskA_models = {}
         for label in ENTITIES:
-            model = torch.load(f"trained/taskA-{label}.pt")
+            model = torch.load(f"trained/taskA-{label}.pt")["model"]
             taskA_models[label] = model
             model.eval()
-        taskB_model = torch.load("./trained/taskB.pt")
+        taskB_model = torch.load("./trained/taskB.pt")["model"]
         taskB_model.eval()
         algorithm = UHMajaModel(taskA_models, taskB_model)
 
