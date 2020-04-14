@@ -10,6 +10,7 @@ from kdtools.datasets import (
     from_biluov,
     get_nlp,
     match_tokens_to_entities,
+    to_biluov,
 )
 from kdtools.encoders import SequenceCharEncoder
 from kdtools.layers import CharEmbeddingEncoder
@@ -342,3 +343,39 @@ if __name__ == "__main__":
 
         tasks = handle_args()
         Run.submit("ehealth19-maja", tasks, algorithm)
+
+    def _test_biluov_task():
+        import es_core_news_md
+        from scripts.utils import Sentence
+
+        def forward(tokensxsentence, entitiesxsentence):
+            labelsxsentence, _ = to_biluov(tokensxsentence, entitiesxsentence)
+            return [
+                from_biluov(biluov, sentence, spans=True)
+                for biluov, sentence in zip(labelsxsentence, tokensxsentence)
+            ]
+
+        training = Collection().load(Path("data/training/scenario.txt"))
+        nlp = es_core_news_md.load()
+
+        def per_label(label):
+            tokensxsentence = [nlp(s.text) for s in training.sentences]
+            entitiesxsentence = [
+                [k.spans for k in s.keyphrases if k.label == label]
+                for s in training.sentences
+            ]
+            decoded = forward(tokensxsentence, entitiesxsentence)
+            return decoded
+
+        collection = Collection([Sentence(s.text) for s in training.sentences])
+        for label in ENTITIES:
+            decoded = per_label(label)
+            for entities, sentence in zip(decoded, collection.sentences):
+                for spans in entities:
+                    keyphrase = Keyphrase(sentence, label, -1, spans)
+                    sentence.keyphrases.append(keyphrase)
+
+        collection.fix_ids()
+        output = Path("data/submissions/forward-biluov/train/run1/scenario2-taskA/")
+        output.mkdir(parents=True, exist_ok=True)
+        collection.dump(output / "scenario.txt", skip_empty_sentences=False)
