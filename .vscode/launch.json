@@ -17,6 +17,9 @@
             "request": "launch",
             "module": "src.ehealth19",
             "justMyCode": false,
+            "args": [
+                "--train"
+            ]
         }
     ]
 }
