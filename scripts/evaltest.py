@@ -32,57 +32,44 @@ def evaluate_scenario(submit_path: Path, gold: Collection, scenario: int):
     return results
 
 
-def evaluate_one(
-    submit_path: Path,
-    scenario1_gold: Collection,
-    scenario2_gold: Collection,
-    scenario3_gold: Collection,
-    scenario4_gold: Collection,
-):
-    scenario1_submit = submit_path / "scenario1-main"
-    scenario2_submit = submit_path / "scenario2-taskA"
-    scenario3_submit = submit_path / "scenario3-taskB"
-    scenario4_submit = submit_path / "scenario4-transfer"
+def evaluate_one(submit_path: Path, *scenario_golds: Collection):
+    names = [
+        "scenario1-main",
+        "scenario2-taskA",
+        "scenario3-taskB",
+        "scenario4-transfer",
+    ]
 
-    scenario1 = dict(
-        evaluate_scenario(scenario1_submit, scenario1_gold, 1), submit=submit_path.name
-    )
-    scenario2 = dict(
-        evaluate_scenario(scenario2_submit, scenario2_gold, 2), submit=submit_path.name
-    )
-    scenario3 = dict(
-        evaluate_scenario(scenario3_submit, scenario3_gold, 3), submit=submit_path.name
-    )
-    scenario4 = dict(
-        evaluate_scenario(scenario4_submit, scenario4_gold, 4), submit=submit_path.name
-    )
+    result = dict(submit=submit_path.name)
 
-    return dict(
-        submit=submit_path.name,
-        scenario1=scenario1,
-        scenario2=scenario2,
-        scenario3=scenario3,
-        scenario4=scenario4,
-    )
+    # not all scenarios have to be provided
+    for i, (scenario_gold, name) in enumerate(zip(scenario_golds, names), 1):
+        scenario_submit = submit_path / name
+
+        scenario = dict(
+            evaluate_scenario(scenario_submit, scenario_gold, i),
+            submit=submit_path.name,
+        )
+
+        result[name.split("-")[0]] = scenario
+
+    return result
 
 
 def filter_best(results):
     best = {}
 
     for user, submits in results.items():
-        scenario1 = [entry["scenario1"] for entry in submits]
-        scenario2 = [entry["scenario2"] for entry in submits]
-        scenario3 = [entry["scenario3"] for entry in submits]
-        scenario4 = [entry["scenario4"] for entry in submits]
-
-        best1 = max(scenario1, key=lambda d: d["f1"])
-        best2 = max(scenario2, key=lambda d: d["f1"])
-        best3 = max(scenario3, key=lambda d: d["f1"])
-        best4 = max(scenario4, key=lambda d: d["f1"])
-
-        best[user] = dict(
-            scenario1=best1, scenario2=best2, scenario3=best3, scenario4=best4
-        )
+        user_dict = {}
+        for name in ["scenario1", "scenario2", "scenario3", "scenario4"]:
+            try:
+                scenario = [entry[name] for entry in submits]
+                best = max(scenario, key=lambda d: d["f1"])
+                user_dict[name] = best
+            except KeyError:
+                warnings.warn("Scenario {0} not found!".format(name))
+                user_dict[name] = collections.defaultdict(float)
+        best[user] = user_dict
 
     return best
 
@@ -125,16 +112,27 @@ def main(
 
     if mode == "test":
         test_gold = Path(gold)
-        scn1_gold = Collection().load(test_gold / "testing/scenario1-main/scenario.txt")
-        scn2_gold = Collection().load(test_gold / "testing/scenario2-taskA/scenario.txt")
-        scn3_gold = Collection().load(test_gold / "testing/scenario3-taskB/scenario.txt")
-        scn4_gold = Collection().load(test_gold / "testing/scenario4-transfer/scenario.txt")
+        gold_scenarios = [
+            Collection().load(test_gold / "testing/scenario1-main/scenario.txt"),
+            Collection().load(test_gold / "testing/scenario2-taskA/scenario.txt"),
+            Collection().load(test_gold / "testing/scenario3-taskB/scenario.txt"),
+            Collection().load(test_gold / "testing/scenario4-transfer/scenario.txt"),
+        ]
     elif mode == "dev":
         dev_gold = Path(gold)
-        scn1_gold = Collection().load(dev_gold / "development/main/scenario.txt")
-        scn2_gold = Collection().load(dev_gold / "development/main/scenario.txt")
-        scn3_gold = Collection().load(dev_gold / "development/main/scenario.txt")
-        scn4_gold = Collection().load(dev_gold / "development/transfer/scenario.txt")
+        gold_scenarios = [
+            Collection().load(dev_gold / "development/main/scenario.txt"),
+            Collection().load(dev_gold / "development/main/scenario.txt"),
+            Collection().load(dev_gold / "development/main/scenario.txt"),
+            Collection().load(dev_gold / "development/transfer/scenario.txt"),
+        ]
+    elif mode == "train":
+        dev_gold = Path(gold)
+        gold_scenarios = [
+            Collection().load(dev_gold / "training/scenario.txt"),
+            Collection().load(dev_gold / "training/scenario.txt"),
+            Collection().load(dev_gold / "training/scenario.txt"),
+        ]
     else:
         raise ValueError("Unexpected mode: {0}".format(mode))
 
@@ -144,13 +142,13 @@ def main(
         runs = submits / mode
         if not runs.exists():
             raise ValueError(
-                "Directory {0} not found. Check --mode and --single options."
+                "Directory {0} not found. Check --mode and --single options.".format(
+                    runs
+                )
             )
         ensure_number_of_runs(runs)
         for subfolder in runs.iterdir():
-            users[submits.name].append(
-                evaluate_one(subfolder, scn1_gold, scn2_gold, scn3_gold, scn4_gold,)
-            )
+            users[submits.name].append(evaluate_one(subfolder, *gold_scenarios))
     else:
         for userfolder in submits.iterdir():
             if not userfolder.is_dir():
@@ -158,13 +156,13 @@ def main(
             runs = userfolder / mode
             if not runs.exists():
                 raise ValueError(
-                    "Directory {0} not found. Did you mean to use --single? Check --mode option."
+                    "Directory {0} not found. Did you mean to use --single? Check --mode option.".format(
+                        runs
+                    )
                 )
             ensure_number_of_runs(runs)
             for subfolder in runs.iterdir():
-                users[userfolder.name].append(
-                    evaluate_one(subfolder, scn1_gold, scn2_gold, scn3_gold, scn4_gold,)
-                )
+                users[userfolder.name].append(evaluate_one(subfolder, *gold_scenarios))
 
     results = dict(users)
 
@@ -247,7 +245,7 @@ def main(
         results = results[single]
 
         for scn, metrics in results.items():
-            for m in ['f1', 'precision', 'recall']:
+            for m in ["f1", "precision", "recall"]:
                 print(f"{scn}-{m}: {metrics[m]:0.5}")
     else:
         print(json.dumps(results, sort_keys=True, indent=2 if pretty else None))
@@ -257,7 +255,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("evaltest")
     parser.add_argument(
         "--mode",
-        choices=["test", "dev"],
+        choices=["test", "dev", "train"],
         default="test",
         required=True,
         help="set the evaluation mode",
@@ -298,11 +296,13 @@ if __name__ == "__main__":
         help="if passed, results are formatted for final publication. Can only be passed with --csv and --best.",
     )
     parser.add_argument(
-        "--gold", help="if passed, overrides the path of the gold collection.",
+        "--gold",
+        help="if passed, overrides the path of the gold collection.",
         default="data",
     )
     parser.add_argument(
-        "--submit", help="if passed, overrides the path of the submit folder.",
+        "--submit",
+        help="if passed, overrides the path of the submit folder.",
         default="data/submissions",
     )
     args = parser.parse_args()
