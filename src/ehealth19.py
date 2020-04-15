@@ -108,9 +108,20 @@ class UHMajaModel(Algorithm):
         inclusion,
         n_epochs=100,
         save_to=None,
+        early_stopping=None,
     ):
-        self.train_taskA(collection, validation, jointly, n_epochs, save_to)
-        self.train_taskB(collection, validation, jointly, inclusion, n_epochs, save_to)
+        self.train_taskA(
+            collection, validation, jointly, n_epochs, save_to, early_stopping
+        )
+        self.train_taskB(
+            collection,
+            validation,
+            jointly,
+            inclusion,
+            n_epochs,
+            save_to,
+            early_stopping,
+        )
 
     def train_taskA(
         self,
@@ -119,6 +130,7 @@ class UHMajaModel(Algorithm):
         jointly,
         n_epochs=100,
         save_to=None,
+        early_stopping=None,
     ):
         char_encoder = None
 
@@ -149,6 +161,7 @@ class UHMajaModel(Algorithm):
                     if save_to is not None
                     else None
                 ),
+                early_stopping=early_stopping,
             )
         else:
             for label in ENTITIES:
@@ -159,6 +172,7 @@ class UHMajaModel(Algorithm):
                     label,
                     n_epochs,
                     save_to=save_to(label) if save_to is not None else None,
+                    early_stopping=early_stopping,
                 )
 
         self.taskA_models = models
@@ -188,7 +202,14 @@ class UHMajaModel(Algorithm):
         return dataset
 
     def train_taskA_model(
-        self, model, dataset, validation, desc, n_epochs=100, save_to: str = None
+        self,
+        model,
+        dataset,
+        validation,
+        desc,
+        n_epochs=100,
+        save_to: str = None,
+        early_stopping=None,
     ):
         train_on_shallow_dataloader(
             model,
@@ -199,10 +220,18 @@ class UHMajaModel(Algorithm):
             n_epochs=n_epochs,
             desc=desc,
             save_to=save_to,
+            early_stopping=early_stopping,
         )
 
     def train_all_taskA_models(
-        self, models, datasets, validations, desc, n_epochs=100, save_to: str = None
+        self,
+        models,
+        datasets,
+        validations,
+        desc,
+        n_epochs=100,
+        save_to: str = None,
+        early_stopping=None,
     ):
         jointly_train_on_shallow_dataloader(
             models,
@@ -213,6 +242,7 @@ class UHMajaModel(Algorithm):
             n_epochs=n_epochs,
             desc=desc,
             save_to=save_to,
+            early_stopping=early_stopping,
         )
 
     def train_taskB(
@@ -223,6 +253,7 @@ class UHMajaModel(Algorithm):
         inclusion,
         n_epochs=100,
         save_to=None,
+        early_stopping=None,
     ):
 
         dataset = self.build_taskB_dataset(collection, inclusion)
@@ -256,6 +287,7 @@ class UHMajaModel(Algorithm):
             n_epochs=n_epochs,
             desc="relations",
             save_to=save_to("taskB"),
+            early_stopping=early_stopping,
         )
 
         self.taskB_model = model
@@ -317,7 +349,7 @@ if __name__ == "__main__":
             return "trained/taskB.pt"
         raise ValueError("Cannot handle `name`")
 
-    def _training_task():
+    def _training_task(n_epochs, inclusion=0.1):
         training = Collection().load(Path("data/training/scenario.txt"))
         validation = Collection().load(Path("data/development/main/scenario.txt"))
 
@@ -326,9 +358,10 @@ if __name__ == "__main__":
             training,
             validation,
             jointly=True,
-            inclusion=0.1,
-            n_epochs=1,
+            inclusion=inclusion,
+            n_epochs=n_epochs,
             save_to=name_to_path,
+            early_stopping=dict(wait=5, delta=0.0),
         )
 
     def _run_task():
