@@ -349,20 +349,53 @@ if __name__ == "__main__":
             return "trained/taskB.pt"
         raise ValueError("Cannot handle `name`")
 
-    def _training_task(n_epochs, inclusion=0.1):
+    def _training_task(
+        n_epochs, *, inclusion=0.1, task=None, jointly=True, early_stopping=None
+    ):
         training = Collection().load(Path("data/training/scenario.txt"))
         validation = Collection().load(Path("data/development/main/scenario.txt"))
 
+        early_stopping = early_stopping or dict(wait=5, delta=0.0)
+
         algorithm = UHMajaModel()
-        algorithm.train(
-            training,
-            validation,
-            jointly=True,
-            inclusion=inclusion,
-            n_epochs=n_epochs,
-            save_to=name_to_path,
-            early_stopping=dict(wait=5, delta=0.0),
-        )
+        if task is None:
+            algorithm.train(
+                training,
+                validation,
+                jointly=jointly,
+                inclusion=inclusion,
+                n_epochs=n_epochs,
+                save_to=name_to_path,
+                early_stopping=early_stopping,
+            )
+        elif task == "A":
+            algorithm.train_taskA(
+                training,
+                validation,
+                jointly=jointly,
+                n_epochs=n_epochs,
+                save_to=name_to_path,
+                early_stopping=early_stopping,
+            )
+        elif task == "B":
+            # load A
+            if jointly:
+                taskA_models = {}
+                for label in ENTITIES:
+                    model = torch.load(f"trained/taskA-{label}.pt")["model"]
+                    taskA_models[label] = model
+                    model.eval()
+                algorithm.taskA_models = taskA_models
+
+            algorithm.train_taskB(
+                training,
+                validation,
+                jointly=jointly,
+                inclusion=inclusion,
+                n_epochs=n_epochs,
+                save_to=name_to_path,
+                early_stopping=early_stopping,
+            )
 
     def _run_task():
         taskA_models = {}
