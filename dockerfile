@@ -16,3 +16,4 @@ RUN rm starship.sh
 
 RUN pip install -U black
 RUN pip install -U mypy
+RUN pip install -U pytorch-crf

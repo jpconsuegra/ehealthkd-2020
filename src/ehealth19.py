@@ -71,8 +71,8 @@ class UHMajaModel(Algorithm):
             desc=entity_label,
         ):
             tokensxsentence = dataset.tokensxsentence[sid]
-            output = model(s_features).squeeze(0)
-            output = output.argmax(dim=-1)
+            output = model(s_features)
+            output = model.decode(output)
             labels = [dataset.labels[x] for x in output]
             decoded = from_biluov(labels, tokensxsentence, spans=True)
 
@@ -116,9 +116,16 @@ class UHMajaModel(Algorithm):
         n_epochs=100,
         save_to=None,
         early_stopping=None,
+        use_crf=True,
     ):
         self.train_taskA(
-            collection, validation, jointly, n_epochs, save_to, early_stopping
+            collection,
+            validation,
+            jointly,
+            n_epochs,
+            save_to=save_to,
+            early_stopping=early_stopping,
+            use_crf=use_crf,
         )
         self.train_taskB(
             collection,
@@ -126,8 +133,8 @@ class UHMajaModel(Algorithm):
             jointly,
             inclusion,
             n_epochs,
-            save_to,
-            early_stopping,
+            save_to=save_to,
+            early_stopping=early_stopping,
         )
 
     def train_taskA(
@@ -138,6 +145,7 @@ class UHMajaModel(Algorithm):
         n_epochs=100,
         save_to=None,
         early_stopping=None,
+        use_crf=True,
     ):
         char_encoder = None
 
@@ -146,7 +154,9 @@ class UHMajaModel(Algorithm):
         validations = {}
         for label in ENTITIES:
             dataset = self.build_taskA_dataset(collection, label)
-            model = self.build_taskA_model(dataset, n_epochs, shared=char_encoder)
+            model = self.build_taskA_model(
+                dataset, n_epochs, shared=char_encoder, use_crf=use_crf
+            )
             validation_ds = self.build_taskA_dataset(validation, label)
 
             models[label] = model
@@ -169,6 +179,7 @@ class UHMajaModel(Algorithm):
                     else None
                 ),
                 early_stopping=early_stopping,
+                use_crf=use_crf,
             )
         else:
             for label in ENTITIES:
@@ -180,11 +191,14 @@ class UHMajaModel(Algorithm):
                     n_epochs,
                     save_to=save_to(label) if save_to is not None else None,
                     early_stopping=early_stopping,
+                    use_crf=use_crf,
                 )
 
         self.taskA_models = models
 
-    def build_taskA_model(self, dataset: BILUOVSentencesDS, n_epochs=100, shared=None):
+    def build_taskA_model(
+        self, dataset: BILUOVSentencesDS, n_epochs=100, *, shared=None, use_crf=True
+    ):
         model = BasicSequenceTagger(
             char_vocab_size=dataset.char_size,
             char_embedding_dim=self.CHAR_EMBEDDING_DIM,
@@ -195,6 +209,7 @@ class UHMajaModel(Algorithm):
             token_repr_dim=self.TOKEN_REPR_DIM,
             num_labels=dataset.label_size,
             char_encoder=shared,
+            use_crf=use_crf,
         )
 
         return model
@@ -217,13 +232,15 @@ class UHMajaModel(Algorithm):
         n_epochs=100,
         save_to: str = None,
         early_stopping=None,
+        use_crf=True,
     ):
         train_on_shallow_dataloader(
             model,
             dataset,
             validation,
             optim=optim.SGD,
-            criterion=nn.CrossEntropyLoss,
+            criterion=model.crf_loss if use_crf else None,
+            predictor=model.decode if use_crf else None,
             n_epochs=n_epochs,
             desc=desc,
             save_to=save_to,
@@ -239,13 +256,15 @@ class UHMajaModel(Algorithm):
         n_epochs=100,
         save_to: str = None,
         early_stopping=None,
+        use_crf=True,
     ):
         jointly_train_on_shallow_dataloader(
             models,
             datasets,
             validations,
             optim=optim.SGD,
-            criterion=nn.CrossEntropyLoss,
+            criterion=(lambda model: model.crf_loss) if use_crf else None,
+            predictor=(lambda model: model.decode) if use_crf else None,
             n_epochs=n_epochs,
             desc=desc,
             save_to=save_to,
@@ -357,7 +376,13 @@ if __name__ == "__main__":
         raise ValueError("Cannot handle `name`")
 
     def _training_task(
-        n_epochs, *, inclusion=0.1, task=None, jointly=True, early_stopping=None
+        n_epochs,
+        *,
+        inclusion=0.1,
+        task=None,
+        jointly=True,
+        early_stopping=None,
+        use_crf=True,
     ):
         training = Collection().load(Path("data/training/scenario.txt"))
         validation = Collection().load(Path("data/development/main/scenario.txt"))
@@ -374,6 +399,7 @@ if __name__ == "__main__":
                 n_epochs=n_epochs,
                 save_to=name_to_path,
                 early_stopping=early_stopping,
+                use_crf=use_crf,
             )
         elif task == "A":
             algorithm.train_taskA(
@@ -383,6 +409,7 @@ if __name__ == "__main__":
                 n_epochs=n_epochs,
                 save_to=name_to_path,
                 early_stopping=early_stopping,
+                use_crf=use_crf,
             )
         elif task == "B":
             # load A
