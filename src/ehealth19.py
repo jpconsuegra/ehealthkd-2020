@@ -1,4 +1,5 @@
 import os
+import warnings
 from typing import Dict
 
 import torch
@@ -40,9 +41,15 @@ class UHMajaModel(Algorithm):
 
     def run(self, collection: Collection, *args, taskA: bool, taskB: bool, **kargs):
         if taskA:
-            self.run_taskA(collection, *args, **kargs)
+            if self.taskA_models is None:
+                warnings.warn("No model for taskA available. Skipping ...")
+            else:
+                self.run_taskA(collection, *args, **kargs)
         if taskB:
-            self.run_taskB(collection, *args, **kargs)
+            if self.taskB_model is None:
+                warnings.warn("No model for taskB available. Skipping ...")
+            else:
+                self.run_taskB(collection, *args, **kargs)
         return collection
 
     def run_taskA(self, collection: Collection, *args, **kargs):
@@ -397,14 +404,22 @@ if __name__ == "__main__":
                 early_stopping=early_stopping,
             )
 
-    def _run_task():
-        taskA_models = {}
-        for label in ENTITIES:
-            model = torch.load(f"trained/taskA-{label}.pt")["model"]
-            taskA_models[label] = model
-            model.eval()
-        taskB_model = torch.load("./trained/taskB.pt")["model"]
-        taskB_model.eval()
+    def _run_task(task=None):
+        if task == "B":
+            taskA_models = None
+        else:
+            taskA_models = {}
+            for label in ENTITIES:
+                model = torch.load(f"trained/taskA-{label}.pt")["model"]
+                taskA_models[label] = model
+                model.eval()
+
+        if task == "A":
+            taskB_model = None
+        else:
+            taskB_model = torch.load("./trained/taskB.pt")["model"]
+            taskB_model.eval()
+
         algorithm = UHMajaModel(taskA_models, taskB_model)
 
         tasks = handle_args()
