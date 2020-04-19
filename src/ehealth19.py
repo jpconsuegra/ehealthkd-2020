@@ -451,7 +451,11 @@ if __name__ == "__main__":
         else:
             taskA_models = {}
             for label in ENTITIES:
-                model = torch.load(f"trained/taskA-{label}.pt")["model"]
+                checkpoint = torch.load(f"trained/taskA-{label}.pt")
+                print(f"[{label}]:".center(80, ":"))
+                for key, value in checkpoint.items():
+                    print(f"{key}: {value}")
+                model = checkpoint["model"]
                 taskA_models[label] = model
                 model.eval()
 
