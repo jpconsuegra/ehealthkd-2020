@@ -16,6 +16,7 @@ from kdtools.datasets import (
 from kdtools.encoders import SequenceCharEncoder
 from kdtools.layers import CharEmbeddingEncoder
 from kdtools.models import BasicSequenceClassifier, BasicSequenceTagger
+from kdtools.nlp import BertNLP
 from kdtools.utils import (
     jointly_train_on_shallow_dataloader,
     train_on_shallow_dataloader,
@@ -32,9 +33,16 @@ class UHMajaModel(Algorithm):
     TOKEN_REPR_DIM = 300
 
     def __init__(
-        self, taskA_models=None, taskB_model=None, *, only_representative=False
+        self,
+        taskA_models=None,
+        taskB_model=None,
+        *,
+        only_representative=False,
+        use_bert=False,
     ):
-        self.nlp = get_nlp()
+        nlp = get_nlp()
+        self.nlp = BertNLP(nlp) if use_bert else nlp
+        self.use_bert = use_bert
         self.taskA_models: Dict[nn.Module] = taskA_models
         self.taskB_model: nn.Module = taskB_model
         self.only_representative = only_representative
@@ -247,6 +255,7 @@ class UHMajaModel(Algorithm):
             desc=desc,
             save_to=save_to,
             early_stopping=early_stopping,
+            extra_config=dict(bert=self.use_bert),
         )
 
     def train_all_taskA_models(
@@ -271,6 +280,7 @@ class UHMajaModel(Algorithm):
             desc=desc,
             save_to=save_to,
             early_stopping=early_stopping,
+            extra_config=dict(bert=self.use_bert),
         )
 
     def train_taskB(
@@ -316,6 +326,7 @@ class UHMajaModel(Algorithm):
             desc="relations",
             save_to=save_to("taskB"),
             early_stopping=early_stopping,
+            extra_config=dict(bert=self.use_bert),
         )
 
         self.taskB_model = model
@@ -380,6 +391,7 @@ if __name__ == "__main__":
     def _training_task(
         n_epochs,
         *,
+        use_bert,
         inclusion=0.1,
         task=None,
         jointly=True,
@@ -391,7 +403,7 @@ if __name__ == "__main__":
 
         early_stopping = early_stopping or dict(wait=5, delta=0.0)
 
-        algorithm = UHMajaModel()
+        algorithm = UHMajaModel(use_bert=use_bert)
         if task is None:
             algorithm.train(
                 training,
@@ -433,7 +445,7 @@ if __name__ == "__main__":
                 early_stopping=early_stopping,
             )
 
-    def _run_task(task=None):
+    def _run_task(*, use_bert, task=None):
         if task == "B":
             taskA_models = None
         else:

@@ -20,6 +20,13 @@
             "args": [
                 "--train"
             ]
-        }
+        },
+        {
+            "name": "nlp",
+            "type": "python",
+            "request": "launch",
+            "module": "kdtools.nlp",
+            "justMyCode": false,
+        },
     ]
 }

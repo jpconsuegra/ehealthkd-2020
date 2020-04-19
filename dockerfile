@@ -17,3 +17,5 @@ RUN rm starship.sh
 RUN pip install -U black
 RUN pip install -U mypy
 RUN pip install -U pytorch-crf
+RUN pip install -U transformers
+RUN pip install -U tqdm boto3 requests regex sentencepiece sacremoses
