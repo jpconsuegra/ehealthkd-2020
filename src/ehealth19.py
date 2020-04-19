@@ -465,7 +465,7 @@ if __name__ == "__main__":
             taskB_model = torch.load("./trained/taskB.pt")["model"]
             taskB_model.eval()
 
-        algorithm = UHMajaModel(taskA_models, taskB_model)
+        algorithm = UHMajaModel(taskA_models, taskB_model, use_bert=use_bert)
 
         tasks = handle_args()
         Run.submit("ehealth19-maja", tasks, algorithm)
