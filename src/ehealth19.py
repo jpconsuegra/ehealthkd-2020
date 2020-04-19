@@ -65,46 +65,48 @@ class UHMajaModel(Algorithm):
             [s.text for s in collection.sentences], language=self.nlp
         )
 
-        for sid, (*s_features, _) in tqdm(
-            enumerate(dataset.shallow_dataloader()),
-            total=len(dataset),
-            desc=entity_label,
-        ):
-            tokensxsentence = dataset.tokensxsentence[sid]
-            output = model(s_features)
-            output = model.decode(output)
-            labels = [dataset.labels[x] for x in output]
-            decoded = from_biluov(labels, tokensxsentence, spans=True)
+        with torch.no_grad():
+            for sid, (*s_features, _) in tqdm(
+                enumerate(dataset.shallow_dataloader()),
+                total=len(dataset),
+                desc=entity_label,
+            ):
+                tokensxsentence = dataset.tokensxsentence[sid]
+                output = model(s_features)
+                output = model.decode(output)
+                labels = [dataset.labels[x] for x in output]
+                decoded = from_biluov(labels, tokensxsentence, spans=True)
 
-            sentence = collection.sentences[sid]
-            for spans in decoded:
-                keyphrase = Keyphrase(sentence, entity_label, -1, spans)
-                sentence.keyphrases.append(keyphrase)
+                sentence = collection.sentences[sid]
+                for spans in decoded:
+                    keyphrase = Keyphrase(sentence, entity_label, -1, spans)
+                    sentence.keyphrases.append(keyphrase)
 
     def run_taskB(self, collection: Collection, *args, **kargs):
         model = self.taskB_model
 
         dataset = self.build_taskB_dataset(collection, inclusion=1.1, predict=True)
 
-        for *features, (sid, s_id, d_id) in tqdm(
-            dataset.shallow_dataloader(), total=len(dataset), desc="Relations",
-        ):
-            s_id = s_id.item()
-            d_id = d_id.item()
+        with torch.no_grad():
+            for *features, (sid, s_id, d_id) in tqdm(
+                dataset.shallow_dataloader(), total=len(dataset), desc="Relations",
+            ):
+                s_id = s_id.item()
+                d_id = d_id.item()
 
-            output = model(features).squeeze(0)
-            output = output.argmax(dim=-1)
-            label = dataset.labels[output.item()]
+                output = model(features).squeeze(0)
+                output = output.argmax(dim=-1)
+                label = dataset.labels[output.item()]
 
-            if label is None:
-                continue
+                if label is None:
+                    continue
 
-            sentence = collection.sentences[sid]
-            rel_origin = sentence.keyphrases[s_id].id
-            rel_destination = sentence.keyphrases[d_id].id
+                sentence = collection.sentences[sid]
+                rel_origin = sentence.keyphrases[s_id].id
+                rel_destination = sentence.keyphrases[d_id].id
 
-            relation = Relation(sentence, rel_origin, rel_destination, label)
-            sentence.relations.append(relation)
+                relation = Relation(sentence, rel_origin, rel_destination, label)
+                sentence.relations.append(relation)
 
     def train(
         self,
