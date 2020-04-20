@@ -38,7 +38,7 @@ class UHMajaModel(Algorithm):
         taskB_model=None,
         *,
         only_representative=False,
-        bert_mode = None,
+        bert_mode=None,
     ):
         nlp = get_nlp()
         self.nlp = nlp if bert_mode is None else BertNLP(nlp, merge=bert_mode)
