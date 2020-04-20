@@ -38,11 +38,11 @@ class UHMajaModel(Algorithm):
         taskB_model=None,
         *,
         only_representative=False,
-        use_bert=False,
+        bert_mode = None,
     ):
         nlp = get_nlp()
-        self.nlp = BertNLP(nlp) if use_bert else nlp
-        self.use_bert = use_bert
+        self.nlp = nlp if bert_mode is None else BertNLP(nlp, merge=bert_mode)
+        self.bert_mode = bert_mode
         self.taskA_models: Dict[nn.Module] = taskA_models
         self.taskB_model: nn.Module = taskB_model
         self.only_representative = only_representative
@@ -255,7 +255,7 @@ class UHMajaModel(Algorithm):
             desc=desc,
             save_to=save_to,
             early_stopping=early_stopping,
-            extra_config=dict(bert=self.use_bert),
+            extra_config=dict(bert=self.bert_mode),
         )
 
     def train_all_taskA_models(
@@ -280,7 +280,7 @@ class UHMajaModel(Algorithm):
             desc=desc,
             save_to=save_to,
             early_stopping=early_stopping,
-            extra_config=dict(bert=self.use_bert),
+            extra_config=dict(bert=self.bert_mode),
         )
 
     def train_taskB(
@@ -326,7 +326,7 @@ class UHMajaModel(Algorithm):
             desc="relations",
             save_to=save_to("taskB"),
             early_stopping=early_stopping,
-            extra_config=dict(bert=self.use_bert),
+            extra_config=dict(bert=self.bert_mode),
         )
 
         self.taskB_model = model
@@ -391,7 +391,7 @@ if __name__ == "__main__":
     def _training_task(
         n_epochs,
         *,
-        use_bert,
+        bert_mode,
         inclusion=0.1,
         task=None,
         jointly=True,
@@ -403,7 +403,7 @@ if __name__ == "__main__":
 
         early_stopping = early_stopping or dict(wait=5, delta=0.0)
 
-        algorithm = UHMajaModel(use_bert=use_bert)
+        algorithm = UHMajaModel(bert_mode=bert_mode)
         if task is None:
             algorithm.train(
                 training,
@@ -445,7 +445,18 @@ if __name__ == "__main__":
                 early_stopping=early_stopping,
             )
 
-    def _run_task(*, use_bert, task=None):
+    def _ensure_bert(bert_mode, checkpoint):
+        try:
+            bert = checkpoint["bert"]
+            if bert_mode != bert:
+                raise ValueError(
+                    "The model was not trained using the same configuration of BERT."
+                )
+        except KeyError:
+            if bert_mode is not None:
+                raise ValueError("The model was not trained using BERT.")
+
+    def _run_task(*, bert_mode, task=None):
         if task == "B":
             taskA_models = None
         else:
@@ -455,6 +466,7 @@ if __name__ == "__main__":
                 print(f"[{label}]:".center(80, ":"))
                 for key, value in checkpoint.items():
                     print(f"{key}: {value}")
+                _ensure_bert(bert_mode, checkpoint)
                 model = checkpoint["model"]
                 taskA_models[label] = model
                 model.eval()
@@ -465,7 +477,7 @@ if __name__ == "__main__":
             taskB_model = torch.load("./trained/taskB.pt")["model"]
             taskB_model.eval()
 
-        algorithm = UHMajaModel(taskA_models, taskB_model, use_bert=use_bert)
+        algorithm = UHMajaModel(taskA_models, taskB_model, bert_mode=bert_mode)
 
         tasks = handle_args()
         Run.submit("ehealth19-maja", tasks, algorithm)
