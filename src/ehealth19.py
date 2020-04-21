@@ -430,7 +430,9 @@ if __name__ == "__main__":
             if jointly:
                 taskA_models = {}
                 for label in ENTITIES:
-                    model = torch.load(f"trained/taskA-{label}.pt")["model"]
+                    checkpoint = torch.load(f"trained/taskA-{label}.pt")
+                    _ensure_bert(bert_mode, checkpoint)
+                    model = checkpoint["model"]
                     taskA_models[label] = model
                     model.eval()
                 algorithm.taskA_models = taskA_models
