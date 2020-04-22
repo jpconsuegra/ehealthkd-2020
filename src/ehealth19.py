@@ -447,6 +447,11 @@ if __name__ == "__main__":
                 early_stopping=early_stopping,
             )
 
+    def _log_checkpoint(checkpoint, *, desc):
+        print(f"[{desc}]:".center(80, ":"))
+        for key, value in checkpoint.items():
+            print(f"{key}: {value}")
+
     def _ensure_bert(bert_mode, checkpoint):
         try:
             bert = checkpoint["bert"]
@@ -465,9 +470,7 @@ if __name__ == "__main__":
             taskA_models = {}
             for label in ENTITIES:
                 checkpoint = torch.load(f"trained/taskA-{label}.pt")
-                print(f"[{label}]:".center(80, ":"))
-                for key, value in checkpoint.items():
-                    print(f"{key}: {value}")
+                _log_checkpoint(checkpoint, desc=label)
                 _ensure_bert(bert_mode, checkpoint)
                 model = checkpoint["model"]
                 taskA_models[label] = model
@@ -476,7 +479,10 @@ if __name__ == "__main__":
         if task == "A":
             taskB_model = None
         else:
-            taskB_model = torch.load("./trained/taskB.pt")["model"]
+            checkpoint = torch.load("./trained/taskB.pt")
+            _log_checkpoint(checkpoint, desc="Relations")
+            _ensure_bert(bert_mode, checkpoint)
+            taskB_model = checkpoint["model"]
             taskB_model.eval()
 
         algorithm = UHMajaModel(taskA_models, taskB_model, bert_mode=bert_mode)
