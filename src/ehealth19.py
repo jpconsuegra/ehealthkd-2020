@@ -127,6 +127,7 @@ class UHMajaModel(Algorithm):
         save_to=None,
         early_stopping=None,
         use_crf=True,
+        weight=True,
     ):
         self.train_taskA(
             collection,
@@ -145,6 +146,7 @@ class UHMajaModel(Algorithm):
             n_epochs,
             save_to=save_to,
             early_stopping=early_stopping,
+            weight=weight,
         )
 
     def train_taskA(
@@ -292,6 +294,7 @@ class UHMajaModel(Algorithm):
         n_epochs=100,
         save_to=None,
         early_stopping=None,
+        weight=True,
     ):
 
         dataset = self.build_taskB_dataset(collection, inclusion)
@@ -318,10 +321,17 @@ class UHMajaModel(Algorithm):
 
         validation_ds = self.build_taskB_dataset(validation, inclusion=1.1)
 
+        criterion = nn.CrossEntropyLoss(weight=dataset.weights()) if weight else None
+        validation_criterion = (
+            nn.CrossEntropyLoss(weight=validation_ds.weights()) if weight else None
+        )
+
         train_on_shallow_dataloader(
             model,
             dataset,
             validation_ds,
+            criterion=criterion,
+            validation_criterion=validation_criterion,
             n_epochs=n_epochs,
             desc="relations",
             save_to=save_to("taskB"),
@@ -397,6 +407,7 @@ if __name__ == "__main__":
         jointly=True,
         early_stopping=None,
         use_crf=True,
+        weight=True,
     ):
         training = Collection().load(Path("data/training/scenario.txt"))
         validation = Collection().load(Path("data/development/main/scenario.txt"))
@@ -414,6 +425,7 @@ if __name__ == "__main__":
                 save_to=name_to_path,
                 early_stopping=early_stopping,
                 use_crf=use_crf,
+                weight=weight,
             )
         elif task == "A":
             algorithm.train_taskA(
@@ -445,6 +457,7 @@ if __name__ == "__main__":
                 n_epochs=n_epochs,
                 save_to=name_to_path,
                 early_stopping=early_stopping,
+                weight=weight,
             )
 
     def _log_checkpoint(checkpoint, *, desc):
