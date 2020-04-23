@@ -166,6 +166,9 @@ class UHMajaModel(Algorithm):
         early_stopping=None,
         use_crf=True,
     ):
+        if self.only_bert and jointly:
+            raise ValueError('Cannot train jointly while using only BERT model!')
+
         char_encoder = None
 
         models = {}
