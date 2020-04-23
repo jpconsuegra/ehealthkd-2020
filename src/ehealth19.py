@@ -167,7 +167,7 @@ class UHMajaModel(Algorithm):
         use_crf=True,
     ):
         if self.only_bert and jointly:
-            raise ValueError('Cannot train jointly while using only BERT model!')
+            raise ValueError("Cannot train jointly while using only BERT model!")
 
         char_encoder = None
 
@@ -497,7 +497,7 @@ if __name__ == "__main__":
             if bert_mode is not None:
                 raise ValueError("The model was not trained using BERT.")
 
-    def _run_task(*, bert_mode, task=None):
+    def _run_task(*, bert_mode, task=None, only_bert=False):
         if task == "B":
             taskA_models = None
         else:
@@ -519,7 +519,9 @@ if __name__ == "__main__":
             taskB_model = checkpoint["model"]
             taskB_model.eval()
 
-        algorithm = UHMajaModel(taskA_models, taskB_model, bert_mode=bert_mode)
+        algorithm = UHMajaModel(
+            taskA_models, taskB_model, bert_mode=bert_mode, only_bert=only_bert
+        )
 
         tasks = handle_args()
         Run.submit("ehealth19-maja", tasks, algorithm)
