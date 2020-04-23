@@ -8,6 +8,7 @@ import torch.optim as optim
 from kdtools.datasets import (
     BILUOVSentencesDS,
     DependencyTreeDS,
+    SelectedDS,
     from_biluov,
     get_nlp,
     match_tokens_to_entities,
@@ -15,7 +16,11 @@ from kdtools.datasets import (
 )
 from kdtools.encoders import SequenceCharEncoder
 from kdtools.layers import CharEmbeddingEncoder
-from kdtools.models import BasicSequenceClassifier, BasicSequenceTagger
+from kdtools.models import (
+    BasicSequenceClassifier,
+    BasicSequenceTagger,
+    BertBasedSequenceTagger,
+)
 from kdtools.nlp import BertNLP
 from kdtools.utils import (
     jointly_train_on_shallow_dataloader,
@@ -39,6 +44,7 @@ class UHMajaModel(Algorithm):
         *,
         only_representative=False,
         bert_mode=None,
+        only_bert=False,
     ):
         nlp = get_nlp()
         self.nlp = nlp if bert_mode is None else BertNLP(nlp, merge=bert_mode)
@@ -46,6 +52,7 @@ class UHMajaModel(Algorithm):
         self.taskA_models: Dict[nn.Module] = taskA_models
         self.taskB_model: nn.Module = taskB_model
         self.only_representative = only_representative
+        self.only_bert = only_bert
 
     def run(self, collection: Collection, *args, taskA: bool, taskB: bool, **kargs):
         if taskA:
@@ -211,18 +218,26 @@ class UHMajaModel(Algorithm):
     def build_taskA_model(
         self, dataset: BILUOVSentencesDS, n_epochs=100, *, shared=None, use_crf=True
     ):
-        model = BasicSequenceTagger(
-            char_vocab_size=dataset.char_size,
-            char_embedding_dim=self.CHAR_EMBEDDING_DIM,
-            padding_idx=dataset.padding,
-            char_repr_dim=self.CHAR_REPR_DIM,
-            word_repr_dim=dataset.vectors_len,
-            postag_repr_dim=dataset.pos_size,
-            token_repr_dim=self.TOKEN_REPR_DIM,
-            num_labels=dataset.label_size,
-            char_encoder=shared,
-            use_crf=use_crf,
-        )
+
+        if self.only_bert:
+            model = BertBasedSequenceTagger(
+                word_repr_dim=dataset.vectors_len,
+                num_labels=dataset.label_size,
+                use_crf=use_crf,
+            )
+        else:
+            model = BasicSequenceTagger(
+                char_vocab_size=dataset.char_size,
+                char_embedding_dim=self.CHAR_EMBEDDING_DIM,
+                padding_idx=dataset.padding,
+                char_repr_dim=self.CHAR_REPR_DIM,
+                word_repr_dim=dataset.vectors_len,
+                postag_repr_dim=dataset.pos_size,
+                token_repr_dim=self.TOKEN_REPR_DIM,
+                num_labels=dataset.label_size,
+                char_encoder=shared,
+                use_crf=use_crf,
+            )
 
         return model
 
@@ -233,6 +248,8 @@ class UHMajaModel(Algorithm):
             for s in collection.sentences
         ]
         dataset = BILUOVSentencesDS(sentences, entities, language=self.nlp)
+        if self.only_bert:
+            dataset = SelectedDS(dataset, 1)
         return dataset
 
     def train_taskA_model(
@@ -408,13 +425,14 @@ if __name__ == "__main__":
         early_stopping=None,
         use_crf=True,
         weight=True,
+        only_bert=False,
     ):
         training = Collection().load(Path("data/training/scenario.txt"))
         validation = Collection().load(Path("data/development/main/scenario.txt"))
 
         early_stopping = early_stopping or dict(wait=5, delta=0.0)
 
-        algorithm = UHMajaModel(bert_mode=bert_mode)
+        algorithm = UHMajaModel(bert_mode=bert_mode, only_bert=only_bert)
         if task is None:
             algorithm.train(
                 training,
