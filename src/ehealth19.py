@@ -79,8 +79,6 @@ class UHMajaModel(Algorithm):
         dataset = BILUOVSentencesDS(
             [s.text for s in collection.sentences], language=self.nlp
         )
-        if self.only_bert:
-            dataset = SelectedDS(dataset, 1)
 
         with torch.no_grad():
             for sid, (*s_features, _) in tqdm(
@@ -253,8 +251,6 @@ class UHMajaModel(Algorithm):
             for s in collection.sentences
         ]
         dataset = BILUOVSentencesDS(sentences, entities, language=self.nlp)
-        if self.only_bert:
-            dataset = SelectedDS(dataset, 1)
         return dataset
 
     def train_taskA_model(
