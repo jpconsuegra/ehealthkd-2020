@@ -19,6 +19,7 @@ from kdtools.layers import CharEmbeddingEncoder
 from kdtools.models import (
     BasicSequenceClassifier,
     BasicSequenceTagger,
+    BertBasedSequenceClassifier,
     BertBasedSequenceTagger,
 )
 from kdtools.nlp import BertNLP
@@ -46,6 +47,9 @@ class UHMajaModel(Algorithm):
         bert_mode=None,
         only_bert=False,
     ):
+        if only_bert and bert_mode is None:
+            raise ValueError("BERT mode not set!")
+
         nlp = get_nlp()
         self.nlp = nlp if bert_mode is None else BertNLP(nlp, merge=bert_mode)
         self.bert_mode = bert_mode
@@ -314,28 +318,37 @@ class UHMajaModel(Algorithm):
         early_stopping=None,
         weight=True,
     ):
+        if self.only_bert and jointly:
+            raise ValueError("Cannot train jointly while using only BERT model!")
 
         dataset = self.build_taskB_dataset(collection, inclusion)
         char2repr = (
             next(iter(self.taskA_models.values())).char_encoder if jointly else None
         )
 
-        model = BasicSequenceClassifier(
-            char_vocab_size=dataset.char_size,
-            char_embedding_dim=self.CHAR_EMBEDDING_DIM,
-            padding_idx=dataset.padding,
-            char_repr_dim=self.CHAR_REPR_DIM,
-            word_repr_dim=dataset.vectors_len,
-            postag_repr_dim=dataset.pos_size,
-            dep_repr_dim=dataset.dep_size,
-            entity_repr_dim=dataset.ent_size,
-            subtree_repr_dim=self.TOKEN_REPR_DIM,
-            token_repr_dim=self.TOKEN_REPR_DIM,
-            num_labels=dataset.label_size,
-            char_encoder=char2repr,
-            already_encoded=False,
-            freeze=True,
-        )
+        if self.only_bert:
+            model = BertBasedSequenceClassifier(
+                word_repr_dim=dataset.vectors_len,
+                num_labels=dataset.label_size,
+                merge_mode=self.bert_mode,
+            )
+        else:
+            model = BasicSequenceClassifier(
+                char_vocab_size=dataset.char_size,
+                char_embedding_dim=self.CHAR_EMBEDDING_DIM,
+                padding_idx=dataset.padding,
+                char_repr_dim=self.CHAR_REPR_DIM,
+                word_repr_dim=dataset.vectors_len,
+                postag_repr_dim=dataset.pos_size,
+                dep_repr_dim=dataset.dep_size,
+                entity_repr_dim=dataset.ent_size,
+                subtree_repr_dim=self.TOKEN_REPR_DIM,
+                token_repr_dim=self.TOKEN_REPR_DIM,
+                num_labels=dataset.label_size,
+                char_encoder=char2repr,
+                already_encoded=False,
+                freeze=True,
+            )
 
         validation_ds = self.build_taskB_dataset(validation, inclusion=1.1)
 
