@@ -19,3 +19,9 @@ RUN pip install -U mypy
 RUN pip install -U pytorch-crf
 RUN pip install -U transformers
 RUN pip install -U tqdm boto3 requests regex sentencepiece sacremoses
+
+RUN pip install nltk streamlit
+RUN python -c "import nltk; nltk.download('stopwords')"
+RUN python -c "import nltk; nltk.download('wordnet')"
+RUN python -c "import nltk; nltk.download('averaged_perceptron_tagger')"
+RUN python -c "import nltk; nltk.download('sentiwordnet')"

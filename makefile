@@ -50,3 +50,7 @@ test-codalab:
 	cp -r data/submissions/baseline/* codalab/res
 	rm -r codalab/program/scripts
 	ln -s `pwd`/scripts codalab/program/scripts
+
+.PHONY: streamlit
+streamlit:
+	streamlit run --browser.serverAddress localhost main.py
