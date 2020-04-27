@@ -452,8 +452,6 @@ if __name__ == "__main__":
     ):
         training = Collection().load(Path("data/training/scenario.txt"))
         validation = Collection().load(Path("data/development/main/scenario.txt"))
-        training.sentences = training.sentences[5:]
-        validation.sentences = validation.sentences[5:]
 
         early_stopping = early_stopping or dict(wait=5, delta=0.0)
 
@@ -597,6 +595,3 @@ if __name__ == "__main__":
         output = Path("data/submissions/forward-biluov/train/run1/scenario2-taskA/")
         output.mkdir(parents=True, exist_ok=True)
         collection.dump(output / "scenario.txt", skip_empty_sentences=False)
-
-    _training_task(100, bert_mode="first", weight=True)
-
