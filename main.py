@@ -1,62 +1,82 @@
 import pandas as pd
 import streamlit as st
-from kdtools.conceptnet import ConceptNet
+from kdtools.conceptnet import ConceptNet, ConceptNetEncoder
 
-"# ConceptNet"
+tab = st.sidebar.selectbox("Tab", ["hello", "cnet", "cnet_encoder"])
 
-cnet = ConceptNet()
+if tab == "hello":
+    "# Hello"
 
-"## Head "
-st.table(cnet().sample(5))
+    "Choose a tag in the sidebar!!!"
 
-st.show(cnet.unknown_rels)
-st.show(cnet.SYMMETRIC_RELS)
-st.show(cnet.ASYMMETRIC_RELS)
+elif tab == "cnet":
 
-possible_languages = cnet.possible_languages()
-possible_pos = cnet.possible_pos()
+    "# ConceptNet"
 
-st.sidebar.subheader("Relation")
+    cnet = ConceptNet()
 
-rel = st.sidebar.selectbox("Label", [None] + cnet.relations())
+    "## Head "
+    st.table(cnet().sample(5))
 
-st.sidebar.subheader("Source")
+    st.show(cnet.unknown_rels)
+    st.show(cnet.SYMMETRIC_RELS)
+    st.show(cnet.ASYMMETRIC_RELS)
 
-source = st.sidebar.text_input("Text", key="Source Text")
-source = source if source.strip() else None
+    possible_languages = cnet.possible_languages()
+    possible_pos = cnet.possible_pos()
 
-source_language = st.sidebar.multiselect(
-    "Language", possible_languages, key="Source Language", default=["es"]
-)
-source_language = source_language if source_language else None
+    st.sidebar.subheader("Relation")
 
-source_pos = st.sidebar.multiselect("Pos", possible_pos, key="Source Pos")
-source_pos = source_pos if source_pos else None
+    rel = st.sidebar.selectbox("Label", [None] + cnet.relations())
 
-st.sidebar.subheader("Head")
+    st.sidebar.subheader("Source")
 
-head = st.sidebar.text_input("Text", key="Head Text", value="asthma")
-head = head if head.strip() else None
+    source = st.sidebar.text_input("Text", key="Source Text")
+    source = source if source.strip() else None
 
-head_language = st.sidebar.multiselect(
-    "Language", possible_languages, key="Head Language", default=["en"]
-)
-head_language = head_language if head_language else None
+    source_language = st.sidebar.multiselect(
+        "Language", possible_languages, key="Source Language", default=["es"]
+    )
+    source_language = source_language if source_language else None
 
-head_pos = st.sidebar.multiselect("Pos", possible_pos, key="Head Pos")
-head_pos = head_pos if head_pos else None
+    source_pos = st.sidebar.multiselect("Pos", possible_pos, key="Source Pos")
+    source_pos = source_pos if source_pos else None
 
+    st.sidebar.subheader("Head")
 
-selected = cnet(
-    rel=rel,
-    source=source,
-    head=head,
-    source_language=source_language,
-    head_language=head_language,
-    source_pos=source_pos,
-    head_pos=head_pos,
-)
-try:
-    st.table(selected.sample(5))
-except ValueError:
-    st.table(selected.head())
+    head = st.sidebar.text_input("Text", key="Head Text", value="asthma")
+    head = head if head.strip() else None
+
+    head_language = st.sidebar.multiselect(
+        "Language", possible_languages, key="Head Language", default=["en"]
+    )
+    head_language = head_language if head_language else None
+
+    head_pos = st.sidebar.multiselect("Pos", possible_pos, key="Head Pos")
+    head_pos = head_pos if head_pos else None
+
+    selected = cnet(
+        rel=rel,
+        source=source,
+        head=head,
+        source_language=source_language,
+        head_language=head_language,
+        source_pos=source_pos,
+        head_pos=head_pos,
+    )
+    try:
+        st.table(selected.sample(5))
+    except ValueError:
+        st.table(selected.head())
+
+elif tab == "cnet_encoder":
+
+    "# ConceptNet Encoder"
+
+    encoder = ConceptNetEncoder.from_entities(["asma", "asthma"])
+
+    st.show(encoder._entities)
+    st.show(encoder._relations)
+    st.show(len(encoder))
+    st.show(encoder("asma", "asthma"))
+    st.show(encoder("asma", "gato"))
