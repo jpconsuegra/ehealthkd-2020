@@ -45,7 +45,7 @@ class UHMajaModel(Algorithm):
         only_representative=False,
         bert_mode=None,
         only_bert=False,
-        conceptnet=False,
+        cnet_mode=None,
     ):
         if only_bert and bert_mode is None:
             raise ValueError("BERT mode not set!")
@@ -57,7 +57,7 @@ class UHMajaModel(Algorithm):
         self.taskB_model: nn.Module = taskB_model
         self.only_representative = only_representative
         self.only_bert = only_bert
-        self.conceptnet = conceptnet
+        self.cnet_mode = cnet_mode
 
     def run(self, collection: Collection, *args, taskA: bool, taskB: bool, **kargs):
         if taskA:
@@ -373,7 +373,7 @@ class UHMajaModel(Algorithm):
             desc="relations",
             save_to=save_to("taskB"),
             early_stopping=early_stopping,
-            extra_config=dict(bert=self.bert_mode, cnet=self.conceptnet),
+            extra_config=dict(bert=self.bert_mode, cnet=self.cnet_mode),
         )
 
         self.taskB_model = model
@@ -415,7 +415,7 @@ class UHMajaModel(Algorithm):
             self.nlp,
             inclusion=inclusion,
             char2repr=None,
-            conceptnet=self.conceptnet,
+            conceptnet=self.cnet_mode,
         )
 
         return dataset
@@ -440,6 +440,7 @@ if __name__ == "__main__":
         n_epochs,
         *,
         bert_mode,
+        cnet_mode,
         inclusion=0.1,
         task=None,
         jointly=True,
@@ -447,7 +448,6 @@ if __name__ == "__main__":
         use_crf=True,
         weight=True,
         only_bert=False,
-        conceptnet=False,
     ):
         training = Collection().load(Path("data/training/scenario.txt"))
         validation = Collection().load(Path("data/development/main/scenario.txt"))
@@ -455,7 +455,7 @@ if __name__ == "__main__":
         early_stopping = early_stopping or dict(wait=5, delta=0.0)
 
         algorithm = UHMajaModel(
-            bert_mode=bert_mode, only_bert=only_bert, conceptnet=conceptnet
+            bert_mode=bert_mode, only_bert=only_bert, cnet_mode=cnet_mode
         )
         if task is None:
             algorithm.train(
@@ -518,18 +518,18 @@ if __name__ == "__main__":
             if bert_mode is not None:
                 raise ValueError("The model was not trained using BERT.")
 
-    def _ensure_conceptnet(active, checkpoint):
+    def _ensure_conceptnet(cnet_mode, checkpoint):
         try:
             conceptnet = checkpoint["cnet"]
-            if active != conceptnet:
+            if cnet_mode != conceptnet:
                 raise ValueError(
                     "The model was not trained using the same configuration for ConceptNet."
                 )
         except KeyError:
-            if active:
+            if cnet_mode is not None:
                 raise ValueError("The model was not trained using ConceptNet.")
 
-    def _run_task(*, bert_mode, conceptnet, task=None, only_bert=False):
+    def _run_task(*, bert_mode, cnet_mode, task=None, only_bert=False):
         if task == "B":
             taskA_models = None
         else:
@@ -548,7 +548,7 @@ if __name__ == "__main__":
             checkpoint = torch.load("./trained/taskB.pt")
             _log_checkpoint(checkpoint, desc="Relations")
             _ensure_bert(bert_mode, checkpoint)
-            _ensure_conceptnet(conceptnet, checkpoint)
+            _ensure_conceptnet(cnet_mode, checkpoint)
             taskB_model = checkpoint["model"]
             taskB_model.eval()
 
@@ -557,7 +557,7 @@ if __name__ == "__main__":
             taskB_model,
             bert_mode=bert_mode,
             only_bert=only_bert,
-            conceptnet=conceptnet,
+            cnet_mode=cnet_mode,
         )
 
         tasks = handle_args()

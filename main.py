@@ -73,9 +73,16 @@ elif tab == "cnet_encoder":
 
     "# ConceptNet Encoder"
 
-    encoder = ConceptNetEncoder.from_entities(["asma", "asthma"])
+    mode = st.sidebar.selectbox("Mode", ["simple", "deep"])
 
-    st.show(encoder._entities)
+    if mode == 'deep':
+        import es_core_news_md
+        nlp = es_core_news_md.load()
+    else:
+        nlp = None
+
+    encoder = ConceptNetEncoder.from_clustered_entities([["asma", "asthma"]], mode, nlp=nlp)
+
     st.show(encoder._relations)
     st.show(len(encoder))
     st.show(encoder("asma", "asthma"))
