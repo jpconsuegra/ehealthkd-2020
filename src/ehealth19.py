@@ -554,7 +554,11 @@ if __name__ == "__main__":
             taskB_model.eval()
 
         algorithm = UHMajaModel(
-            taskA_models, taskB_model, bert_mode=bert_mode, only_bert=only_bert
+            taskA_models,
+            taskB_model,
+            bert_mode=bert_mode,
+            only_bert=only_bert,
+            conceptnet=conceptnet,
         )
 
         tasks = handle_args()
