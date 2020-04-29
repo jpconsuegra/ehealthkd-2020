@@ -10,7 +10,6 @@ from kdtools.datasets import (
     DependencyTreeDS,
     SelectedDS,
     from_biluov,
-    get_nlp,
     match_tokens_to_entities,
     to_biluov,
 )
@@ -22,7 +21,7 @@ from kdtools.models import (
     BertBasedSequenceClassifier,
     BertBasedSequenceTagger,
 )
-from kdtools.nlp import BertNLP
+from kdtools.nlp import BertNLP, get_nlp
 from kdtools.utils import (
     jointly_train_on_shallow_dataloader,
     train_on_shallow_dataloader,
