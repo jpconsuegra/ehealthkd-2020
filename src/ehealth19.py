@@ -46,6 +46,7 @@ class UHMajaModel(Algorithm):
         bert_mode=None,
         only_bert=False,
         cnet_mode=None,
+        tag=None,
     ):
         if only_bert and bert_mode is None:
             raise ValueError("BERT mode not set!")
@@ -58,6 +59,7 @@ class UHMajaModel(Algorithm):
         self.only_representative = only_representative
         self.only_bert = only_bert
         self.cnet_mode = cnet_mode
+        self.tag = tag
 
     def run(self, collection: Collection, *args, taskA: bool, taskB: bool, **kargs):
         if taskA:
@@ -105,7 +107,9 @@ class UHMajaModel(Algorithm):
     def run_taskB(self, collection: Collection, *args, **kargs):
         model = self.taskB_model
 
-        dataset = self.build_taskB_dataset(collection, inclusion=1.1, predict=True)
+        dataset = self.build_taskB_dataset(
+            collection, inclusion=1.1, predict=True, tag=self.tag
+        )
 
         with torch.no_grad():
             for *features, (sid, s_id, d_id) in tqdm(
@@ -326,7 +330,7 @@ class UHMajaModel(Algorithm):
         if self.only_bert and jointly:
             raise ValueError("Cannot train jointly while using only BERT model!")
 
-        dataset = self.build_taskB_dataset(collection, inclusion)
+        dataset = self.build_taskB_dataset(collection, inclusion, tag="train")
         char2repr = (
             next(iter(self.taskA_models.values())).char_encoder if jointly else None
         )
@@ -356,7 +360,7 @@ class UHMajaModel(Algorithm):
                 pairwise_info_size=dataset.pair_size,
             )
 
-        validation_ds = self.build_taskB_dataset(validation, inclusion=1.1)
+        validation_ds = self.build_taskB_dataset(validation, inclusion=1.1, tag="dev")
 
         criterion = nn.CrossEntropyLoss(weight=dataset.weights()) if weight else None
         validation_criterion = (
@@ -378,7 +382,9 @@ class UHMajaModel(Algorithm):
 
         self.taskB_model = model
 
-    def build_taskB_dataset(self, collection: Collection, inclusion, predict=False):
+    def build_taskB_dataset(
+        self, collection: Collection, inclusion, predict=False, tag=None
+    ):
         tokensxsentence = [self.nlp(s.text) for s in collection.sentences]
         entities = [
             [(k.spans, k.label) for k in s.keyphrases] for s in collection.sentences
@@ -415,7 +421,9 @@ class UHMajaModel(Algorithm):
             self.nlp,
             inclusion=inclusion,
             char2repr=None,
-            conceptnet=self.cnet_mode,
+            conceptnet=(
+                self.cnet_mode if tag is None else {"mode": self.cnet_mode, "tag": tag}
+            ),
         )
 
         return dataset
@@ -529,7 +537,7 @@ if __name__ == "__main__":
             if cnet_mode is not None:
                 raise ValueError("The model was not trained using ConceptNet.")
 
-    def _run_task(*, bert_mode, cnet_mode, task=None, only_bert=False):
+    def _run_task(tag, *, bert_mode, cnet_mode, task=None, only_bert=False):
         if task == "B":
             taskA_models = None
         else:
@@ -558,6 +566,7 @@ if __name__ == "__main__":
             bert_mode=bert_mode,
             only_bert=only_bert,
             cnet_mode=cnet_mode,
+            tag=tag,
         )
 
         tasks = handle_args()
