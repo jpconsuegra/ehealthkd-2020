@@ -232,6 +232,7 @@ class eHealth20Model(Algorithm):
             save_to=save_to,
             early_stopping=early_stopping,
             use_crf=use_crf,
+            weight=weight,
         )
         self.train_taskB(
             collection,
@@ -241,6 +242,7 @@ class eHealth20Model(Algorithm):
             n_epochs,
             save_to=save_to,
             early_stopping=early_stopping,
+            use_crf=use_crf,
             weight=weight,
             train_pairs=train_pairs,
             train_seqs=train_seqs,
@@ -255,6 +257,7 @@ class eHealth20Model(Algorithm):
         save_to=None,
         early_stopping=None,
         use_crf=True,
+        weight=True,
     ):
         if self.only_bert and jointly:
             raise ValueError("Cannot train jointly while using only BERT model!")
@@ -292,6 +295,7 @@ class eHealth20Model(Algorithm):
                 ),
                 early_stopping=early_stopping,
                 use_crf=use_crf,
+                weight=weight,
             )
         else:
             for label in ENTITIES:
@@ -304,6 +308,7 @@ class eHealth20Model(Algorithm):
                     save_to=save_to(label) if save_to is not None else None,
                     early_stopping=early_stopping,
                     use_crf=use_crf,
+                    weight=weight,
                 )
 
         self.taskA_models = models
@@ -353,13 +358,35 @@ class eHealth20Model(Algorithm):
         save_to: str = None,
         early_stopping=None,
         use_crf=True,
+        weight=True,
     ):
+        if use_crf and weight:
+            warnings.warn(
+                "Using both CRF and weighting in taskA model. `weight` will be ignored."
+            )
+
+        criterion = (
+            model.crf_loss
+            if use_crf
+            else nn.CrossEntropyLoss(weight=dataset.weights())
+            if weight
+            else None
+        )
+        validation_criterion = (
+            model.crf_loss
+            if use_crf
+            else nn.CrossEntropyLoss(weight=validation.weights())
+            if weight
+            else None
+        )
+
         train_on_shallow_dataloader(
             model,
             dataset,
             validation,
             optim=optim.SGD,
-            criterion=model.crf_loss if use_crf else None,
+            criterion=criterion,
+            validation_criterion=validation_criterion,
             predictor=model.decode if use_crf else None,
             n_epochs=n_epochs,
             desc=desc,
@@ -378,14 +405,37 @@ class eHealth20Model(Algorithm):
         save_to: str = None,
         early_stopping=None,
         use_crf=True,
+        weight=True,
     ):
+        if use_crf and weight:
+            warnings.warn(
+                "Using both CRF and weighting in taskA model. `weight` will be ignored."
+            )
+
+        if use_crf:
+            criterion = lambda i, model: model.crf_loss
+            validation_criterion = None
+        elif weight:
+            _criterion = [
+                nn.CrossEntropyLoss(weight=dataset.weights()) for dataset in datasets
+            ]
+            criterion = lambda i, model: _criterion[i]
+            _validation_criterion = [
+                nn.CrossEntropyLoss(weight=validation.weights())
+                for validation in validations
+            ]
+            validation_criterion = lambda i, model: _validation_criterion[i]
+        else:
+            criterion, validation_criterion = None, None
+
         jointly_train_on_shallow_dataloader(
             models,
             datasets,
             validations,
             optim=optim.SGD,
-            criterion=(lambda model: model.crf_loss) if use_crf else None,
-            predictor=(lambda model: model.decode) if use_crf else None,
+            criterion=criterion,
+            validation_criterion=validation_criterion,
+            predictor=(lambda i, model: model.decode) if use_crf else None,
             n_epochs=n_epochs,
             desc=desc,
             save_to=save_to,
@@ -531,7 +581,7 @@ class eHealth20Model(Algorithm):
                 if weight
                 else None
             )
-            predictor=model.decode if use_crf else None
+            predictor = model.decode if use_crf else None
 
             train_on_shallow_dataloader(
                 model,
@@ -699,6 +749,7 @@ if __name__ == "__main__":
                 save_to=name_to_path,
                 early_stopping=early_stopping,
                 use_crf=use_crf,
+                weight=weight,
             )
         elif task == "B":
             # load A
@@ -721,6 +772,7 @@ if __name__ == "__main__":
                 save_to=name_to_path,
                 early_stopping=early_stopping,
                 weight=weight,
+                use_crf=use_crf,
                 train_pairs=(
                     TAXONOMIC_RELS
                     if split_relations == "both"
