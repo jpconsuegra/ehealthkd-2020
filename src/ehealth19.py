@@ -554,6 +554,7 @@ class eHealth20Model(Algorithm):
                 word_repr_dim=dataset2.vectors_len,
                 postag_repr_dim=dataset2.pos_size,
                 dep_repr_dim=dataset2.dep_size,
+                rdep_repr_dim=dataset2.rdep_size,
                 entity_repr_dim=dataset2.ent_size,
                 token_repr_dim=self.TOKEN_REPR_DIM,
                 position_repr_dim=dataset2.positional_size,
