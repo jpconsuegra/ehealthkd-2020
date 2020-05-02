@@ -8,6 +8,7 @@ import torch.optim as optim
 from kdtools.datasets import (
     BILUOVSentencesDS,
     DependencyTreeDS,
+    FocusOnEntityDS,
     SelectedDS,
     from_biluov,
     match_tokens_to_entities,
@@ -16,6 +17,7 @@ from kdtools.datasets import (
 from kdtools.encoders import SequenceCharEncoder
 from kdtools.layers import CharEmbeddingEncoder
 from kdtools.models import (
+    AttentionSequenceTagger,
     BasicSequenceClassifier,
     BasicSequenceTagger,
     BertBasedSequenceClassifier,
@@ -31,16 +33,39 @@ from tqdm import tqdm
 from scripts.submit import Algorithm, Run, handle_args
 from scripts.utils import ENTITIES, RELATIONS, Collection, Keyphrase, Relation
 
+TAXONOMIC_RELS = [
+    "is-a",
+    "same-as",
+    "part-of",
+    "has-property",
+    "causes",
+    "entails",
+]
 
-class UHMajaModel(Algorithm):
+CONTEXT_RELS = [
+    "in-context",
+    "in-place",
+    "in-time",
+    "subject",
+    "target",
+    "domain",
+    "arg",
+]
+
+assert set(TAXONOMIC_RELS + CONTEXT_RELS) == set(RELATIONS)
+
+
+class eHealth20Model(Algorithm):
     CHAR_EMBEDDING_DIM = 100
     CHAR_REPR_DIM = 200
     TOKEN_REPR_DIM = 300
+    POSITIONAL_EMBEDDING_DIM = 100
 
     def __init__(
         self,
         taskA_models=None,
-        taskB_model=None,
+        taskB_pair_model=None,
+        taskB_seq_model=None,
         *,
         only_representative=False,
         bert_mode=None,
@@ -55,7 +80,8 @@ class UHMajaModel(Algorithm):
         self.nlp = nlp if bert_mode is None else BertNLP(nlp, merge=bert_mode)
         self.bert_mode = bert_mode
         self.taskA_models: Dict[nn.Module] = taskA_models
-        self.taskB_model: nn.Module = taskB_model
+        self.taskB_pair_model: nn.Module = taskB_pair_model
+        self.taskB_seq_model: nn.Module = taskB_seq_model
         self.only_representative = only_representative
         self.only_bert = only_bert
         self.cnet_mode = cnet_mode
@@ -68,7 +94,7 @@ class UHMajaModel(Algorithm):
             else:
                 self.run_taskA(collection, *args, **kargs)
         if taskB:
-            if self.taskB_model is None:
+            if self.taskB_pair_model is None and self.taskB_seq_model is None:
                 warnings.warn("No model for taskB available. Skipping ...")
             else:
                 self.run_taskB(collection, *args, **kargs)
@@ -105,15 +131,38 @@ class UHMajaModel(Algorithm):
                     sentence.keyphrases.append(keyphrase)
 
     def run_taskB(self, collection: Collection, *args, **kargs):
-        model = self.taskB_model
-
-        dataset = self.build_taskB_dataset(
-            collection, inclusion=1.1, predict=True, tag=self.tag
+        train_pairs, train_seq = (
+            (TAXONOMIC_RELS, CONTEXT_RELS)
+            if self.taskB_pair_model is not None and self.taskB_seq_model is not None
+            else (RELATIONS, None)
+            if self.taskB_pair_model is not None
+            else (None, RELATIONS)
+            if self.taskB_seq_model is not None
+            else (None, None)
         )
+
+        pair_dataset, seq_dataset = self.build_taskB_dataset(
+            collection,
+            inclusion=1.1,
+            predict=True,
+            tag=self.tag,
+            train_pairs=train_pairs,
+            train_seqs=train_seq,
+        )
+
+        self.run_taskB_on_pairs(pair_dataset, collection, *args, **kargs)
+        self.run_taskB_on_seqs(seq_dataset, collection, *args, **kargs)
+
+    def run_taskB_on_pairs(self, dataset, collection: Collection, *args, **kargs):
+        model = self.taskB_pair_model
+        if model is None:
+            return
 
         with torch.no_grad():
             for *features, (sid, s_id, d_id) in tqdm(
-                dataset.shallow_dataloader(), total=len(dataset), desc="Relations",
+                dataset.shallow_dataloader(),
+                total=len(dataset),
+                desc="Relations (Pairs)",
             ):
                 s_id = s_id.item()
                 d_id = d_id.item()
@@ -132,6 +181,34 @@ class UHMajaModel(Algorithm):
                 relation = Relation(sentence, rel_origin, rel_destination, label)
                 sentence.relations.append(relation)
 
+    def run_taskB_on_seqs(self, dataset, collection: Collection, *args, **kargs):
+        model = self.taskB_seq_model
+        if model is None:
+            return
+
+        with torch.no_grad():
+            for (features, i), (sid, head_id, tokens_ids) in tqdm(
+                dataset.shallow_dataloader(),
+                total=len(dataset),
+                desc="Relations (Sequence)",
+            ):
+                output = model(features, i)
+                output = model.decode(output)
+                labels = [dataset.labels[x] for x in output]
+
+                sentence = collection.sentences[sid]
+                head_entity = sentence.keyphrases[head_id]
+                for token_id, label in zip(tokens_ids, labels):
+                    if label is None or token_id is None:
+                        continue
+
+                    token_entity = sentence.keyphrases[token_id]
+
+                    rel_origin = head_entity.id
+                    rel_destination = token_entity.id
+                    relation = Relation(sentence, rel_origin, rel_destination, label)
+                    sentence.relations.append(relation)
+
     def train(
         self,
         collection: Collection,
@@ -144,6 +221,8 @@ class UHMajaModel(Algorithm):
         early_stopping=None,
         use_crf=True,
         weight=True,
+        train_pairs=TAXONOMIC_RELS,
+        train_seqs=CONTEXT_RELS,
     ):
         self.train_taskA(
             collection,
@@ -163,6 +242,8 @@ class UHMajaModel(Algorithm):
             save_to=save_to,
             early_stopping=early_stopping,
             weight=weight,
+            train_pairs=train_pairs,
+            train_seqs=train_seqs,
         )
 
     def train_taskA(
@@ -322,6 +403,9 @@ class UHMajaModel(Algorithm):
         save_to=None,
         early_stopping=None,
         weight=True,
+        use_crf=True,
+        train_pairs=TAXONOMIC_RELS,
+        train_seqs=CONTEXT_RELS,
     ):
         if weight and inclusion <= 1:
             warnings.warn(
@@ -330,61 +414,131 @@ class UHMajaModel(Algorithm):
         if self.only_bert and jointly:
             raise ValueError("Cannot train jointly while using only BERT model!")
 
-        dataset = self.build_taskB_dataset(collection, inclusion, tag="train")
+        print(f"Training pairs: {train_pairs}")
+        print(f"Training seqs: {train_seqs}")
+
+        dataset1, dataset2 = self.build_taskB_dataset(
+            collection,
+            inclusion,
+            tag="train",
+            train_pairs=train_pairs,
+            train_seqs=train_seqs,
+        )
+        validation_ds1, validation_ds2 = self.build_taskB_dataset(
+            validation,
+            inclusion=1.1,
+            tag="dev",
+            train_pairs=train_pairs,
+            train_seqs=train_seqs,
+        )
+
         char2repr = (
             next(iter(self.taskA_models.values())).char_encoder if jointly else None
         )
 
-        if self.only_bert:
-            model = BertBasedSequenceClassifier(
-                word_repr_dim=dataset.vectors_len,
-                num_labels=dataset.label_size,
-                merge_mode=self.bert_mode,
+        if dataset1 is not None:
+
+            if self.only_bert:
+                model = BertBasedSequenceClassifier(
+                    word_repr_dim=dataset1.vectors_len,
+                    num_labels=dataset1.label_size,
+                    merge_mode=self.bert_mode,
+                )
+            else:
+                model = BasicSequenceClassifier(
+                    char_vocab_size=dataset1.char_size,
+                    char_embedding_dim=self.CHAR_EMBEDDING_DIM,
+                    padding_idx=dataset1.padding,
+                    char_repr_dim=self.CHAR_REPR_DIM,
+                    word_repr_dim=dataset1.vectors_len,
+                    postag_repr_dim=dataset1.pos_size,
+                    dep_repr_dim=dataset1.dep_size,
+                    entity_repr_dim=dataset1.ent_size,
+                    subtree_repr_dim=self.TOKEN_REPR_DIM,
+                    token_repr_dim=self.TOKEN_REPR_DIM,
+                    num_labels=dataset1.label_size,
+                    char_encoder=char2repr,
+                    already_encoded=False,
+                    freeze=True,
+                    pairwise_info_size=dataset1.pair_size,
+                )
+            criterion = (
+                nn.CrossEntropyLoss(weight=dataset1.weights()) if weight else None
             )
-        else:
-            model = BasicSequenceClassifier(
-                char_vocab_size=dataset.char_size,
+            validation_criterion = (
+                nn.CrossEntropyLoss(weight=validation_ds1.weights()) if weight else None
+            )
+
+            train_on_shallow_dataloader(
+                model,
+                dataset1,
+                validation_ds1,
+                criterion=criterion,
+                validation_criterion=validation_criterion,
+                n_epochs=n_epochs,
+                desc="relations (pairs)",
+                save_to=save_to("taskB-pairs"),
+                early_stopping=early_stopping,
+                extra_config=dict(bert=self.bert_mode, cnet=self.cnet_mode),
+            )
+
+            self.taskB_pair_model = model
+
+        if dataset2 is not None:
+
+            ## THIS IS NOT CONVENIENT
+            # char2repr = (
+            #     self.taskB_pair_model.char_encoder
+            #     if jointly and char2repr is None and self.taskB_pair_model is not None
+            #     else char2repr
+            # )
+
+            model = AttentionSequenceTagger(
+                char_vocab_size=dataset2.char_size,
                 char_embedding_dim=self.CHAR_EMBEDDING_DIM,
-                padding_idx=dataset.padding,
+                padding_idx=dataset2.padding,
                 char_repr_dim=self.CHAR_REPR_DIM,
-                word_repr_dim=dataset.vectors_len,
-                postag_repr_dim=dataset.pos_size,
-                dep_repr_dim=dataset.dep_size,
-                entity_repr_dim=dataset.ent_size,
-                subtree_repr_dim=self.TOKEN_REPR_DIM,
+                word_repr_dim=dataset2.vectors_len,
+                postag_repr_dim=dataset2.pos_size,
+                dep_repr_dim=dataset2.dep_size,
+                entity_repr_dim=dataset2.ent_size,
                 token_repr_dim=self.TOKEN_REPR_DIM,
-                num_labels=dataset.label_size,
+                position_repr_dim=dataset2.positional_size,
+                num_labels=dataset2.label_size,
                 char_encoder=char2repr,
                 already_encoded=False,
                 freeze=True,
-                pairwise_info_size=dataset.pair_size,
+                use_crf=use_crf,
+                pairwise_repr_dim=dataset2.pair_size,
             )
 
-        validation_ds = self.build_taskB_dataset(validation, inclusion=1.1, tag="dev")
+            train_on_shallow_dataloader(
+                model,
+                dataset2,
+                validation_ds2,
+                criterion=None,
+                validation_criterion=None,
+                n_epochs=n_epochs,
+                desc="relations (sequence)",
+                save_to=save_to("taskB-seqs"),
+                early_stopping=early_stopping,
+                extra_config=dict(bert=self.bert_mode, cnet=self.cnet_mode),
+            )
 
-        criterion = nn.CrossEntropyLoss(weight=dataset.weights()) if weight else None
-        validation_criterion = (
-            nn.CrossEntropyLoss(weight=validation_ds.weights()) if weight else None
-        )
-
-        train_on_shallow_dataloader(
-            model,
-            dataset,
-            validation_ds,
-            criterion=criterion,
-            validation_criterion=validation_criterion,
-            n_epochs=n_epochs,
-            desc="relations",
-            save_to=save_to("taskB"),
-            early_stopping=early_stopping,
-            extra_config=dict(bert=self.bert_mode, cnet=self.cnet_mode),
-        )
-
-        self.taskB_model = model
+            self.taskB_seq_model = model
 
     def build_taskB_dataset(
-        self, collection: Collection, inclusion, predict=False, tag=None
+        self,
+        collection: Collection,
+        inclusion,
+        predict=False,
+        tag=None,
+        train_pairs=TAXONOMIC_RELS,
+        train_seqs=CONTEXT_RELS,
     ):
+        if train_pairs is None and train_seqs is None:
+            return None, None
+
         tokensxsentence = [self.nlp(s.text) for s in collection.sentences]
         entities = [
             [(k.spans, k.label) for k in s.keyphrases] for s in collection.sentences
@@ -399,39 +553,70 @@ class UHMajaModel(Algorithm):
             for sentence, tokens in zip(collection.sentences, entitiesxsentence)
             for keyphrase, token in zip(sentence.keyphrases, tokens)
         }
-        relations = (
-            {
-                (
-                    keyphrase2tokens[rel.from_phrase],
-                    keyphrase2tokens[rel.to_phrase],
-                ): rel.label
-                for sentence in collection.sentences
-                for rel in sentence.relations
-            }
-            if not predict
+
+        def get_relations(labels):
+            return (
+                {
+                    (
+                        keyphrase2tokens[rel.from_phrase],
+                        keyphrase2tokens[rel.to_phrase],
+                    ): rel.label
+                    for sentence in collection.sentences
+                    for rel in sentence.relations
+                    if rel.label in labels
+                }
+                if not predict
+                else None
+            )
+
+        pair_dataset = (
+            DependencyTreeDS(
+                entitiesxsentence,
+                get_relations(set(train_pairs)),
+                token2label,
+                ENTITIES,
+                train_pairs,
+                self.nlp,
+                inclusion=inclusion,
+                char2repr=None,
+                conceptnet=(
+                    self.cnet_mode
+                    if tag is None
+                    else {"mode": self.cnet_mode, "tag": tag}
+                ),
+            )
+            if train_pairs is not None
             else None
         )
 
-        dataset = DependencyTreeDS(
-            entitiesxsentence,
-            relations,
-            token2label,
-            ENTITIES,
-            RELATIONS,
-            self.nlp,
-            inclusion=inclusion,
-            char2repr=None,
-            conceptnet=(
-                self.cnet_mode if tag is None else {"mode": self.cnet_mode, "tag": tag}
-            ),
+        seq_dataset = (
+            FocusOnEntityDS(
+                tokensxsentence,
+                entitiesxsentence,
+                get_relations(set(train_seqs)),
+                token2label,
+                ENTITIES,
+                train_seqs,
+                self.nlp,
+                self.POSITIONAL_EMBEDDING_DIM,
+                char2repr=None,
+                conceptnet=(
+                    self.cnet_mode
+                    if tag is None
+                    else {"mode": self.cnet_mode, "tag": tag}
+                ),
+            )
+            if train_seqs is not None
+            else None
         )
 
-        return dataset
+        return pair_dataset, seq_dataset
 
     def save_models(self, path="./trained/"):
         for label, model in self.taskA_models.items():
             torch.save(model, os.path.join(path, f"taskA-{label}.pt"))
-        torch.save(self.taskB_model, os.path.join(path, "taskB.pt"))
+        torch.save(self.taskB_pair_model, os.path.join(path, "taskB.pt"))
+        torch.save(self.taskB_seq_model, os.path.join(path, "taskB-seqs.pt"))
 
 
 if __name__ == "__main__":
@@ -440,8 +625,10 @@ if __name__ == "__main__":
     def name_to_path(name):
         if name in ENTITIES:
             return f"trained/taskA-{name}.pt"
-        if name == "taskB":
+        if name == "taskB-pairs":
             return "trained/taskB.pt"
+        if name == "taskB-seqs":
+            return "trained/taskB-seqs.pt"
         raise ValueError("Cannot handle `name`")
 
     def _training_task(
@@ -449,20 +636,24 @@ if __name__ == "__main__":
         *,
         bert_mode,
         cnet_mode,
-        inclusion=0.1,
+        inclusion=1.1,
         task=None,
         jointly=True,
         early_stopping=None,
         use_crf=True,
         weight=True,
         only_bert=False,
+        split_relations="both",
     ):
+        if split_relations not in ("both", "pair", "seq"):
+            raise ValueError()
+
         training = Collection().load(Path("data/training/scenario.txt"))
         validation = Collection().load(Path("data/development/main/scenario.txt"))
 
         early_stopping = early_stopping or dict(wait=5, delta=0.0)
 
-        algorithm = UHMajaModel(
+        algorithm = eHealth20Model(
             bert_mode=bert_mode, only_bert=only_bert, cnet_mode=cnet_mode
         )
         if task is None:
@@ -508,6 +699,20 @@ if __name__ == "__main__":
                 save_to=name_to_path,
                 early_stopping=early_stopping,
                 weight=weight,
+                train_pairs=(
+                    TAXONOMIC_RELS
+                    if split_relations == "both"
+                    else RELATIONS
+                    if split_relations == "pair"
+                    else None
+                ),
+                train_seqs=(
+                    CONTEXT_RELS
+                    if split_relations == "both"
+                    else RELATIONS
+                    if split_relations == "seq"
+                    else None
+                ),
             )
 
     def _log_checkpoint(checkpoint, *, desc):
@@ -537,7 +742,15 @@ if __name__ == "__main__":
             if cnet_mode is not None:
                 raise ValueError("The model was not trained using ConceptNet.")
 
-    def _run_task(tag, *, bert_mode, cnet_mode, task=None, only_bert=False):
+    def _run_task(
+        tag,
+        run_name="ehealth20-default",
+        *,
+        bert_mode,
+        cnet_mode,
+        task=None,
+        only_bert=False,
+    ):
         if task == "B":
             taskA_models = None
         else:
@@ -551,18 +764,35 @@ if __name__ == "__main__":
                 model.eval()
 
         if task == "A":
-            taskB_model = None
+            taskB_pair_model = None
+            taskB_seq_model = None
         else:
-            checkpoint = torch.load("./trained/taskB.pt")
-            _log_checkpoint(checkpoint, desc="Relations")
-            _ensure_bert(bert_mode, checkpoint)
-            _ensure_conceptnet(cnet_mode, checkpoint)
-            taskB_model = checkpoint["model"]
-            taskB_model.eval()
+            try:
+                checkpoint = torch.load("./trained/taskB.pt")
+                _log_checkpoint(checkpoint, desc="Relations (Pairs)")
+                _ensure_bert(bert_mode, checkpoint)
+                _ensure_conceptnet(cnet_mode, checkpoint)
+                taskB_pair_model = checkpoint["model"]
+                if taskB_pair_model is not None:
+                    taskB_pair_model.eval()
+            except FileNotFoundError:
+                taskB_pair_model = None
 
-        algorithm = UHMajaModel(
+            try:
+                checkpoint = torch.load("./trained/taskB-seqs.pt")
+                _log_checkpoint(checkpoint, desc="Relations (Sequence)")
+                _ensure_bert(bert_mode, checkpoint)
+                _ensure_conceptnet(cnet_mode, checkpoint)
+                taskB_seq_model = checkpoint["model"]
+                if taskB_seq_model is not None:
+                    taskB_seq_model.eval()
+            except FileNotFoundError:
+                taskB_seq_model = None
+
+        algorithm = eHealth20Model(
             taskA_models,
-            taskB_model,
+            taskB_pair_model,
+            taskB_seq_model,
             bert_mode=bert_mode,
             only_bert=only_bert,
             cnet_mode=cnet_mode,
@@ -570,7 +800,7 @@ if __name__ == "__main__":
         )
 
         tasks = handle_args()
-        Run.submit("ehealth19-maja", tasks, algorithm)
+        Run.submit(run_name, tasks, algorithm)
 
     def _test_biluov_task():
         import es_core_news_md
