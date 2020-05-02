@@ -512,12 +512,34 @@ class eHealth20Model(Algorithm):
                 pairwise_repr_dim=dataset2.pair_size,
             )
 
+            if use_crf and weight:
+                warnings.warn(
+                    "Using both CRF and weighting in sequence relation model. `weight` will be ignored."
+                )
+
+            criterion = (
+                model.crf_loss
+                if use_crf
+                else nn.CrossEntropyLoss(weight=dataset2.weights())
+                if weight
+                else None
+            )
+            validation_criterion = (
+                model.crf_loss
+                if use_crf
+                else nn.CrossEntropyLoss(weight=validation_ds2.weights())
+                if weight
+                else None
+            )
+            predictor=model.decode if use_crf else None
+
             train_on_shallow_dataloader(
                 model,
                 dataset2,
                 validation_ds2,
-                criterion=None,
-                validation_criterion=None,
+                criterion=criterion,
+                validation_criterion=validation_criterion,
+                predictor=predictor,
                 n_epochs=n_epochs,
                 desc="relations (sequence)",
                 save_to=save_to("taskB-seqs"),
