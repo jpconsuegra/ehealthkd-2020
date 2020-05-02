@@ -187,19 +187,19 @@ class eHealth20Model(Algorithm):
             return
 
         with torch.no_grad():
-            for (features, i), (sid, head_id, tokens_ids) in tqdm(
+            for features, i, (sid, head_id, tokens_ids) in tqdm(
                 dataset.shallow_dataloader(),
                 total=len(dataset),
                 desc="Relations (Sequence)",
             ):
-                output = model(features, i)
+                output = model((features, i))
                 output = model.decode(output)
                 labels = [dataset.labels[x] for x in output]
 
                 sentence = collection.sentences[sid]
                 head_entity = sentence.keyphrases[head_id]
                 for token_id, label in zip(tokens_ids, labels):
-                    if label is None or token_id is None:
+                    if label is None or token_id < 0:
                         continue
 
                     token_entity = sentence.keyphrases[token_id]
