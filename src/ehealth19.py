@@ -223,6 +223,7 @@ class eHealth20Model(Algorithm):
         weight=True,
         train_pairs=TAXONOMIC_RELS,
         train_seqs=CONTEXT_RELS,
+        straight_forward_encoding=False,
     ):
         self.train_taskA(
             collection,
@@ -246,6 +247,7 @@ class eHealth20Model(Algorithm):
             weight=weight,
             train_pairs=train_pairs,
             train_seqs=train_seqs,
+            straight_forward_encoding=straight_forward_encoding,
         )
 
     def train_taskA(
@@ -456,6 +458,7 @@ class eHealth20Model(Algorithm):
         use_crf=True,
         train_pairs=TAXONOMIC_RELS,
         train_seqs=CONTEXT_RELS,
+        straight_forward_encoding=False,
     ):
         if weight and inclusion <= 1:
             warnings.warn(
@@ -560,6 +563,7 @@ class eHealth20Model(Algorithm):
                 freeze=True,
                 use_crf=use_crf,
                 pairwise_repr_dim=dataset2.pair_size,
+                straight_forward_encoding=straight_forward_encoding,
             )
 
             if use_crf and weight:
@@ -716,6 +720,7 @@ if __name__ == "__main__":
         weight=True,
         only_bert=False,
         split_relations="both",
+        straight_forward_encoding=False,
     ):
         if split_relations not in ("both", "pair", "seq"):
             raise ValueError()
@@ -787,6 +792,7 @@ if __name__ == "__main__":
                     if split_relations == "seq"
                     else None
                 ),
+                straight_forward_encoding=straight_forward_encoding,
             )
 
     def _log_checkpoint(checkpoint, *, desc):
