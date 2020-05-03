@@ -741,6 +741,21 @@ if __name__ == "__main__":
 
         early_stopping = early_stopping or dict(wait=5, delta=0.0)
 
+        train_pairs = (
+            TAXONOMIC_RELS
+            if split_relations == "both"
+            else RELATIONS
+            if split_relations == "pair"
+            else None
+        )
+        train_seqs = (
+            CONTEXT_RELS
+            if split_relations == "both"
+            else RELATIONS
+            if split_relations == "seq"
+            else None
+        )
+
         algorithm = eHealth20Model(
             bert_mode=bert_mode, only_bert=only_bert, cnet_mode=cnet_mode
         )
@@ -755,6 +770,9 @@ if __name__ == "__main__":
                 early_stopping=early_stopping,
                 use_crf=use_crf,
                 weight=weight,
+                train_pairs=train_pairs,
+                train_seqs=train_seqs,
+                straight_forward_encoding=straight_forward_encoding,
             )
         elif task == "A":
             algorithm.train_taskA(
@@ -789,20 +807,8 @@ if __name__ == "__main__":
                 early_stopping=early_stopping,
                 weight=weight,
                 use_crf=use_crf,
-                train_pairs=(
-                    TAXONOMIC_RELS
-                    if split_relations == "both"
-                    else RELATIONS
-                    if split_relations == "pair"
-                    else None
-                ),
-                train_seqs=(
-                    CONTEXT_RELS
-                    if split_relations == "both"
-                    else RELATIONS
-                    if split_relations == "seq"
-                    else None
-                ),
+                train_pairs=train_pairs,
+                train_seqs=train_seqs,
                 straight_forward_encoding=straight_forward_encoding,
             )
 

@@ -26,3 +26,5 @@ RUN python -c "import nltk; nltk.download('wordnet')"
 RUN python -c "import nltk; nltk.download('averaged_perceptron_tagger')"
 RUN python -c "import nltk; nltk.download('sentiwordnet')"
 RUN python -c "import nltk; nltk.download('omw')"
+
+RUN pip install -U networkx
