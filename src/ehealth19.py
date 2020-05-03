@@ -71,7 +71,6 @@ class eHealth20Model(Algorithm):
         bert_mode=None,
         only_bert=False,
         cnet_mode=None,
-        tag=None,
     ):
         if only_bert and bert_mode is None:
             raise ValueError("BERT mode not set!")
@@ -85,7 +84,6 @@ class eHealth20Model(Algorithm):
         self.only_representative = only_representative
         self.only_bert = only_bert
         self.cnet_mode = cnet_mode
-        self.tag = tag
 
     def run(self, collection: Collection, *args, taskA: bool, taskB: bool, **kargs):
         if taskA:
@@ -141,11 +139,23 @@ class eHealth20Model(Algorithm):
             else (None, None)
         )
 
+        mode, scenario = kargs["mode"], kargs["scenario"]
+        if mode == "train":
+            tag = "train"
+        elif mode == "dev":
+            tag = (
+                f"dev-{'transfer' if scenario.split('-')[-1] == 'transfer' else 'main'}"
+            )
+        elif mode == "test":
+            tag = f"test-{scenario.split('-')[-1]}"
+        else:
+            tag = None
+
         pair_dataset, seq_dataset = self.build_taskB_dataset(
             collection,
             inclusion=1.1,
             predict=True,
-            tag=self.tag,
+            tag=tag,
             train_pairs=train_pairs,
             train_seqs=train_seq,
         )
@@ -480,7 +490,7 @@ class eHealth20Model(Algorithm):
         validation_ds1, validation_ds2 = self.build_taskB_dataset(
             validation,
             inclusion=1.1,
-            tag="dev",
+            tag="dev-main",
             train_pairs=train_pairs,
             train_seqs=train_seqs,
         )
@@ -824,7 +834,6 @@ if __name__ == "__main__":
                 raise ValueError("The model was not trained using ConceptNet.")
 
     def _run_task(
-        tag,
         run_name="ehealth20-default",
         *,
         bert_mode,
@@ -877,7 +886,6 @@ if __name__ == "__main__":
             bert_mode=bert_mode,
             only_bert=only_bert,
             cnet_mode=cnet_mode,
-            tag=tag,
         )
 
         tasks = handle_args()
