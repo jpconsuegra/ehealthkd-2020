@@ -234,6 +234,7 @@ class eHealth20Model(Algorithm):
         train_pairs=TAXONOMIC_RELS,
         train_seqs=CONTEXT_RELS,
         straight_forward_encoding=False,
+        reduce=False,
     ):
         self.train_taskA(
             collection,
@@ -258,6 +259,7 @@ class eHealth20Model(Algorithm):
             train_pairs=train_pairs,
             train_seqs=train_seqs,
             straight_forward_encoding=straight_forward_encoding,
+            reduce=reduce,
         )
 
     def train_taskA(
@@ -472,6 +474,7 @@ class eHealth20Model(Algorithm):
         train_pairs=TAXONOMIC_RELS,
         train_seqs=CONTEXT_RELS,
         straight_forward_encoding=False,
+        reduce=False,
     ):
         if weight and inclusion <= 1:
             warnings.warn(
@@ -513,6 +516,7 @@ class eHealth20Model(Algorithm):
                     num_labels=dataset1.label_size,
                     merge_mode=self.bert_mode,
                     pairwise_info_size=dataset1.pair_size,
+                    reduce=reduce,
                 )
             else:
                 model = BasicSequenceClassifier(
@@ -531,6 +535,7 @@ class eHealth20Model(Algorithm):
                     already_encoded=False,
                     freeze=True,
                     pairwise_info_size=dataset1.pair_size,
+                    reduce=reduce,
                 )
             criterion = (
                 nn.CrossEntropyLoss(weight=dataset1.weights()) if weight else None
@@ -737,6 +742,7 @@ if __name__ == "__main__":
         use_crf=True,
         weight=True,
         only_bert=False,
+        reduce=False,
         split_relations="both",
         straight_forward_encoding=False,
     ):
@@ -780,6 +786,7 @@ if __name__ == "__main__":
                 train_pairs=train_pairs,
                 train_seqs=train_seqs,
                 straight_forward_encoding=straight_forward_encoding,
+                reduce=reduce,
             )
         elif task == "A":
             algorithm.train_taskA(
@@ -817,6 +824,7 @@ if __name__ == "__main__":
                 train_pairs=train_pairs,
                 train_seqs=train_seqs,
                 straight_forward_encoding=straight_forward_encoding,
+                reduce=reduce,
             )
 
     def _log_checkpoint(checkpoint, *, desc):
