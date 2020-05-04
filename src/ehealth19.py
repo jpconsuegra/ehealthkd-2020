@@ -272,7 +272,10 @@ class eHealth20Model(Algorithm):
         weight=True,
     ):
         if self.only_bert and jointly:
-            raise ValueError("Cannot train jointly while using only BERT model!")
+            warnings.warn(
+                "Cannot train jointly while using only BERT model! `jointly` will be ignored"
+            )
+            jointly = False
 
         char_encoder = None
 
@@ -475,7 +478,10 @@ class eHealth20Model(Algorithm):
                 "Since using `weight=True`, you probably meant to set `inclusion=1.1`."
             )
         if self.only_bert and jointly:
-            raise ValueError("Cannot train jointly while using only BERT model!")
+            warnings.warn(
+                "Cannot train jointly while using only BERT model! `jointly` will be ignored"
+            )
+            jointly = False
 
         print(f"Training pairs: {train_pairs}")
         print(f"Training seqs: {train_seqs}")
@@ -506,6 +512,7 @@ class eHealth20Model(Algorithm):
                     word_repr_dim=dataset1.vectors_len,
                     num_labels=dataset1.label_size,
                     merge_mode=self.bert_mode,
+                    pairwise_info_size=dataset1.pair_size,
                 )
             else:
                 model = BasicSequenceClassifier(
