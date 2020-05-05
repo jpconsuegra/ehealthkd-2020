@@ -86,21 +86,21 @@ class eHealth20Model(Algorithm):
         self.cnet_mode = cnet_mode
 
     def run(self, collection: Collection, *args, taskA: bool, taskB: bool, **kargs):
-        print(f'Running {{ taskA:{taskA}, taskB:{taskB} }} at {kargs} ...')
+        print(f"Running {{ taskA:{taskA}, taskB:{taskB} }} at {kargs} ...")
         if taskA:
             if self.taskA_models is None:
                 warnings.warn("No model for taskA available. Skipping ...")
             else:
-                print('Starting task A ...')
+                print("Starting task A ...")
                 self.run_taskA(collection, *args, **kargs)
-                print('Done with task A!')
+                print("Done with task A!")
         if taskB:
             if self.taskB_pair_model is None and self.taskB_seq_model is None:
                 warnings.warn("No model for taskB available. Skipping ...")
             else:
-                print('Starting task B ...')
+                print("Starting task B ...")
                 self.run_taskB(collection, *args, **kargs)
-                print('Done with task B!')
+                print("Done with task B!")
         return collection
 
     def run_taskA(self, collection: Collection, *args, **kargs):
@@ -112,9 +112,11 @@ class eHealth20Model(Algorithm):
         self, collection: Collection, entity_label: str, *args, **kargs
     ):
         model = self.taskA_models[entity_label]
+        print(f"Building dataset for {entity_label} ...")
         dataset = BILUOVSentencesDS(
             [s.text for s in collection.sentences], language=self.nlp
         )
+        print(f"Done!")
 
         with torch.no_grad():
             for sid, (*s_features, _) in tqdm(
@@ -156,6 +158,7 @@ class eHealth20Model(Algorithm):
         else:
             tag = None
 
+        print(f"Building dataset for {train_pairs} and {train_seq} ...")
         pair_dataset, seq_dataset = self.build_taskB_dataset(
             collection,
             inclusion=1.1,
@@ -164,6 +167,7 @@ class eHealth20Model(Algorithm):
             train_pairs=train_pairs,
             train_seqs=train_seq,
         )
+        print("Done!")
 
         self.run_taskB_on_pairs(pair_dataset, collection, *args, **kargs)
         self.run_taskB_on_seqs(seq_dataset, collection, *args, **kargs)
