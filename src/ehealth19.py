@@ -692,6 +692,7 @@ class eHealth20Model(Algorithm):
                     if tag is None
                     else {"mode": self.cnet_mode, "tag": tag}
                 ),
+                ignore_deps=self.only_bert,
             )
             if train_pairs is not None
             else None
