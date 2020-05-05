@@ -22,6 +22,7 @@ from kdtools.models import (
     BasicSequenceTagger,
     BertBasedSequenceClassifier,
     BertBasedSequenceTagger,
+    PairClassifier,
 )
 from kdtools.nlp import BertNLP, get_nlp
 from kdtools.utils import (
@@ -71,6 +72,7 @@ class eHealth20Model(Algorithm):
         bert_mode=None,
         only_bert=False,
         cnet_mode=None,
+        ignore_path=False,
     ):
         if only_bert and bert_mode is None:
             raise ValueError("BERT mode not set!")
@@ -84,6 +86,7 @@ class eHealth20Model(Algorithm):
         self.only_representative = only_representative
         self.only_bert = only_bert
         self.cnet_mode = cnet_mode
+        self.ignore_path = ignore_path
 
     def run(self, collection: Collection, *args, taskA: bool, taskB: bool, **kargs):
         print(f"Running {{ taskA:{taskA}, taskB:{taskB} }} at {kargs} ...")
@@ -527,6 +530,23 @@ class eHealth20Model(Algorithm):
                     pairwise_info_size=dataset1.pair_size,
                     reduce=reduce,
                 )
+            elif self.ignore_path:
+                model = PairClassifier(
+                    char_vocab_size=dataset1.char_size,
+                    char_embedding_dim=self.CHAR_EMBEDDING_DIM,
+                    padding_idx=dataset1.padding,
+                    char_repr_dim=self.CHAR_REPR_DIM,
+                    word_repr_dim=dataset1.vectors_len,
+                    postag_repr_dim=dataset1.pos_size,
+                    entity_repr_dim=dataset1.ent_size,
+                    subtree_repr_dim=self.TOKEN_REPR_DIM,
+                    num_labels=dataset1.label_size,
+                    char_encoder=char2repr,
+                    already_encoded=False,
+                    freeze=True,
+                    pairwise_info_size=dataset1.pair_size,
+                    reduce=reduce,
+                )
             else:
                 model = BasicSequenceClassifier(
                     char_vocab_size=dataset1.char_size,
@@ -692,7 +712,7 @@ class eHealth20Model(Algorithm):
                     if tag is None
                     else {"mode": self.cnet_mode, "tag": tag}
                 ),
-                ignore_deps=self.only_bert,
+                ignore_deps=self.ignore_path or self.only_bert,
             )
             if train_pairs is not None
             else None
@@ -745,6 +765,7 @@ if __name__ == "__main__":
         *,
         bert_mode,
         cnet_mode,
+        ignore_path,
         inclusion=1.1,
         task=None,
         jointly=True,
@@ -780,7 +801,10 @@ if __name__ == "__main__":
         )
 
         algorithm = eHealth20Model(
-            bert_mode=bert_mode, only_bert=only_bert, cnet_mode=cnet_mode
+            bert_mode=bert_mode,
+            only_bert=only_bert,
+            cnet_mode=cnet_mode,
+            ignore_path=ignore_path,
         )
         if task is None:
             algorithm.train(
@@ -869,6 +893,7 @@ if __name__ == "__main__":
         *,
         bert_mode,
         cnet_mode,
+        ignore_path,
         task=None,
         only_bert=False,
     ):
@@ -917,6 +942,7 @@ if __name__ == "__main__":
             bert_mode=bert_mode,
             only_bert=only_bert,
             cnet_mode=cnet_mode,
+            ignore_path=ignore_path,
         )
 
         tasks = handle_args()
