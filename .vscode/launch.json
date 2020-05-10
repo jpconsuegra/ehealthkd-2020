@@ -12,10 +12,10 @@
             "justMyCode": false,
         },
         {
-            "name": "ehealth19",
+            "name": "ehealth20",
             "type": "python",
             "request": "launch",
-            "module": "src.ehealth19",
+            "module": "src.ehealth20",
             "justMyCode": false,
             "args": [
                 "--train"
