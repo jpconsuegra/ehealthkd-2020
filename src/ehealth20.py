@@ -247,6 +247,7 @@ class eHealth20Model(Algorithm):
         train_seqs=CONTEXT_RELS,
         straight_forward_encoding=False,
         reduce=False,
+        dropout=False,
     ):
         self.train_taskA(
             collection,
@@ -257,6 +258,7 @@ class eHealth20Model(Algorithm):
             early_stopping=early_stopping,
             use_crf=use_crf,
             weight=weight,
+            dropout=dropout,
         )
         self.train_taskB(
             collection,
@@ -272,6 +274,7 @@ class eHealth20Model(Algorithm):
             train_seqs=train_seqs,
             straight_forward_encoding=straight_forward_encoding,
             reduce=reduce,
+            dropout=dropout,
         )
 
     def train_taskA(
@@ -284,6 +287,7 @@ class eHealth20Model(Algorithm):
         early_stopping=None,
         use_crf=True,
         weight=True,
+        dropout=False,
     ):
         if self.only_bert and jointly:
             warnings.warn(
@@ -299,7 +303,7 @@ class eHealth20Model(Algorithm):
         for label in ENTITIES:
             dataset = self.build_taskA_dataset(collection, label)
             model = self.build_taskA_model(
-                dataset, n_epochs, shared=char_encoder, use_crf=use_crf
+                dataset, n_epochs, shared=char_encoder, use_crf=use_crf, dropout=dropout
             )
             validation_ds = self.build_taskA_dataset(validation, label)
 
@@ -343,7 +347,13 @@ class eHealth20Model(Algorithm):
         self.taskA_models = models
 
     def build_taskA_model(
-        self, dataset: BILUOVSentencesDS, n_epochs=100, *, shared=None, use_crf=True
+        self,
+        dataset: BILUOVSentencesDS,
+        n_epochs=100,
+        *,
+        shared=None,
+        use_crf=True,
+        dropout=False,
     ):
 
         if self.only_bert:
@@ -364,6 +374,7 @@ class eHealth20Model(Algorithm):
                 num_labels=dataset.label_size,
                 char_encoder=shared,
                 use_crf=use_crf,
+                dropout=dropout,
             )
 
         return model
@@ -487,6 +498,7 @@ class eHealth20Model(Algorithm):
         train_seqs=CONTEXT_RELS,
         straight_forward_encoding=False,
         reduce=False,
+        dropout=False,
     ):
         if weight and inclusion <= 1:
             warnings.warn(
@@ -776,6 +788,7 @@ if __name__ == "__main__":
         reduce=False,
         split_relations="both",
         straight_forward_encoding=False,
+        dropout=False,
     ):
         if split_relations not in ("both", "pair", "seq"):
             raise ValueError()
@@ -821,6 +834,7 @@ if __name__ == "__main__":
                 train_seqs=train_seqs,
                 straight_forward_encoding=straight_forward_encoding,
                 reduce=reduce,
+                dropout=dropout,
             )
         elif task == "A":
             algorithm.train_taskA(
@@ -832,6 +846,7 @@ if __name__ == "__main__":
                 early_stopping=early_stopping,
                 use_crf=use_crf,
                 weight=weight,
+                dropout=dropout,
             )
         elif task == "B":
             # load A
@@ -859,6 +874,7 @@ if __name__ == "__main__":
                 train_seqs=train_seqs,
                 straight_forward_encoding=straight_forward_encoding,
                 reduce=reduce,
+                dropout=dropout,
             )
 
     def _log_checkpoint(checkpoint, *, desc):
