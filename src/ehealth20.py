@@ -248,6 +248,7 @@ class eHealth20Model(Algorithm):
         straight_forward_encoding=False,
         reduce=False,
         dropout=False,
+        stacked_layers=1,
     ):
         self.train_taskA(
             collection,
@@ -259,6 +260,7 @@ class eHealth20Model(Algorithm):
             use_crf=use_crf,
             weight=weight,
             dropout=dropout,
+            stacked_layers=stacked_layers,
         )
         self.train_taskB(
             collection,
@@ -288,6 +290,7 @@ class eHealth20Model(Algorithm):
         use_crf=True,
         weight=True,
         dropout=False,
+        stacked_layers=1,
     ):
         if self.only_bert and jointly:
             warnings.warn(
@@ -303,7 +306,12 @@ class eHealth20Model(Algorithm):
         for label in ENTITIES:
             dataset = self.build_taskA_dataset(collection, label)
             model = self.build_taskA_model(
-                dataset, n_epochs, shared=char_encoder, use_crf=use_crf, dropout=dropout
+                dataset,
+                n_epochs,
+                shared=char_encoder,
+                use_crf=use_crf,
+                dropout=dropout,
+                stacked_layers=stacked_layers,
             )
             validation_ds = self.build_taskA_dataset(validation, label)
 
@@ -354,6 +362,7 @@ class eHealth20Model(Algorithm):
         shared=None,
         use_crf=True,
         dropout=False,
+        stacked_layers=1,
     ):
 
         if self.only_bert:
@@ -375,6 +384,7 @@ class eHealth20Model(Algorithm):
                 char_encoder=shared,
                 use_crf=use_crf,
                 dropout=dropout,
+                stacked_layers=stacked_layers,
             )
 
         return model
@@ -789,6 +799,7 @@ if __name__ == "__main__":
         split_relations="both",
         straight_forward_encoding=False,
         dropout=False,
+        stacked_layers=1,
     ):
         if split_relations not in ("both", "pair", "seq"):
             raise ValueError()
@@ -835,6 +846,7 @@ if __name__ == "__main__":
                 straight_forward_encoding=straight_forward_encoding,
                 reduce=reduce,
                 dropout=dropout,
+                stacked_layers=stacked_layers,
             )
         elif task == "A":
             algorithm.train_taskA(
@@ -847,6 +859,7 @@ if __name__ == "__main__":
                 use_crf=use_crf,
                 weight=weight,
                 dropout=dropout,
+                stacked_layers=stacked_layers,
             )
         elif task == "B":
             # load A
